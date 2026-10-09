@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-
-import 'home_page.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'home_ortu_page.dart';
+import 'home_kader_page.dart';
+import 'register_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -10,21 +12,84 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final usernameController = TextEditingController();
+  final emailController = TextEditingController();
   final passwordController = TextEditingController();
+  bool _isLoading = false;
 
   @override
   void dispose() {
-    usernameController.dispose();
+    emailController.dispose();
     passwordController.dispose();
     super.dispose();
   }
 
-  void login() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const HomePage()),
-    );
+  Future<void> login() async {
+    final email = emailController.text.trim();
+    final password = passwordController.text;
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Email dan password tidak boleh kosong!')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    final auth = Supabase.instance.client.auth;
+    try {
+      await auth.signOut();
+      final AuthResponse response = await auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+      if (mounted && response.user != null) {
+        if (response.user!.email?.toLowerCase() == 'kader@gmail.com') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const HomeKaderPage()),
+          );
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const HomeOrtuPage()),
+          );
+        }
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Login tidak berhasil. Silakan coba kembali.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (error) {
+      Object? cleanupError;
+      try {
+        await auth.signOut();
+      } catch (error) {
+        cleanupError = error;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              cleanupError == null
+                  ? 'Gagal masuk: email atau password salah. ($error)'
+                  : 'Gagal masuk dan sesi gagal dibersihkan: $cleanupError',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -42,7 +107,7 @@ class _LoginPageState extends State<LoginPage> {
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
+                  color: Colors.black.withValues(alpha: 0.08),
                   blurRadius: 20,
                   offset: const Offset(0, 8),
                 ),
@@ -55,9 +120,7 @@ class _LoginPageState extends State<LoginPage> {
                   size: 75,
                   color: Colors.green,
                 ),
-
                 const SizedBox(height: 16),
-
                 const Text(
                   'SI-POSYANDU',
                   style: TextStyle(
@@ -66,29 +129,25 @@ class _LoginPageState extends State<LoginPage> {
                     color: Colors.green,
                   ),
                 ),
-
                 const SizedBox(height: 6),
-
                 const Text(
                   'Sistem Informasi Posyandu',
                   style: TextStyle(color: Colors.grey),
                 ),
-
                 const SizedBox(height: 35),
 
                 TextField(
-                  controller: usernameController,
+                  controller: emailController,
+                  keyboardType: TextInputType.emailAddress,
                   decoration: InputDecoration(
-                    labelText: 'Username',
-                    prefixIcon: const Icon(Icons.person_outline),
+                    labelText: 'Email',
+                    prefixIcon: const Icon(Icons.email_outlined),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 16),
-
                 TextField(
                   controller: passwordController,
                   obscureText: true,
@@ -100,14 +159,13 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 25),
 
                 SizedBox(
                   width: double.infinity,
                   height: 52,
                   child: ElevatedButton(
-                    onPressed: login,
+                    onPressed: _isLoading ? null : login,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                       foregroundColor: Colors.white,
@@ -115,13 +173,31 @@ class _LoginPageState extends State<LoginPage> {
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    child: const Text(
-                      'MASUK',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                    child: _isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text(
+                            'MASUK',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const RegisterPage(),
                       ),
-                    ),
+                    );
+                  },
+                  child: const Text(
+                    'Belum punya akun? Daftar Sekarang',
+                    style: TextStyle(color: Colors.green),
                   ),
                 ),
               ],

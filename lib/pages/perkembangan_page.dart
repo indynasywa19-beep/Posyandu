@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../database/database_helper.dart';
 import '../models/anak.dart';
 import '../models/pemeriksaan.dart';
 
@@ -15,7 +15,9 @@ class _PerkembanganPageState extends State<PerkembanganPage> {
   List<Anak> dataAnak = [];
   List<Pemeriksaan> dataPemeriksaan = [];
 
-  int? selectedAnakId;
+  Object? selectedAnakId;
+  bool isLoading = true;
+  String? loadError;
 
   @override
   void initState() {
@@ -24,23 +26,57 @@ class _PerkembanganPageState extends State<PerkembanganPage> {
   }
 
   Future<void> loadData() async {
-    final dataAnakDb = await DatabaseHelper.instance.getAllAnak();
-    final dataPemeriksaanDb = await DatabaseHelper.instance.getAllPemeriksaan();
-
-    final anakList = dataAnakDb.map((item) => Anak.fromMap(item)).toList();
-
-    final pemeriksaanList = dataPemeriksaanDb
-        .map((item) => Pemeriksaan.fromMap(item))
-        .toList();
-
+    final supabase = Supabase.instance.client;
+    final user = supabase.auth.currentUser;
+    if (user == null) {
+      setState(() {
+        loadError = 'Sesi login tidak ditemukan. Silakan masuk kembali.';
+        isLoading = false;
+      });
+      return;
+    }
     setState(() {
-      dataAnak = anakList;
-      dataPemeriksaan = pemeriksaanList;
-
-      if (anakList.isNotEmpty) {
-        selectedAnakId ??= anakList.first.id;
-      }
+      isLoading = true;
+      loadError = null;
     });
+    try {
+      final childrenRows = await supabase
+          .from('anak')
+          .select()
+          .eq('user_id', user.id)
+          .order('nama');
+      final childList = childrenRows.map((row) => Anak.fromMap(row)).toList();
+      final childIds = childList
+          .map((child) => child.id)
+          .whereType<Object>()
+          .toList();
+      final List<Map<String, dynamic>> examinationRows;
+      if (childIds.isEmpty) {
+        examinationRows = [];
+      } else {
+        examinationRows = await supabase
+            .from('pemeriksaan')
+            .select()
+            .inFilter('anak_id', childIds)
+            .order('tanggal', ascending: true);
+      }
+      final examinations = examinationRows
+          .map((row) => Pemeriksaan.fromMap(row))
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        dataAnak = childList;
+        dataPemeriksaan = examinations;
+        selectedAnakId ??= childList.isEmpty ? null : childList.first.id;
+        isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        loadError = 'Gagal memuat data perkembangan: $error';
+        isLoading = false;
+      });
+    }
   }
 
   List<Pemeriksaan> get pemeriksaanAnak {
@@ -75,11 +111,11 @@ class _PerkembanganPageState extends State<PerkembanganPage> {
     Pemeriksaan? pemeriksaanTerakhir;
 
     if (riwayat.isNotEmpty) {
-      pemeriksaanTerakhir = riwayat.first;
+      pemeriksaanTerakhir = riwayat.last;
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5FFF7),
+      backgroundColor: const Color(0xFFF8FAFC),
 
       appBar: AppBar(
         title: const Text('Perkembangan Anak'),
@@ -87,7 +123,16 @@ class _PerkembanganPageState extends State<PerkembanganPage> {
         foregroundColor: Colors.white,
       ),
 
-      body: dataAnak.isEmpty
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : loadError != null
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(loadError!, textAlign: TextAlign.center),
+              ),
+            )
+          : dataAnak.isEmpty
           ? const Center(
               child: Text(
                 'Belum ada data anak.',
@@ -120,8 +165,8 @@ class _PerkembanganPageState extends State<PerkembanganPage> {
                     const SizedBox(height: 20),
 
                     // PILIH ANAK
-                    DropdownButtonFormField<int>(
-                      value: selectedAnakId,
+                    DropdownButtonFormField<Object>(
+                      initialValue: selectedAnakId,
                       decoration: InputDecoration(
                         labelText: 'Pilih Anak',
                         prefixIcon: const Icon(
@@ -136,8 +181,8 @@ class _PerkembanganPageState extends State<PerkembanganPage> {
                         ),
                       ),
                       items: dataAnak.map((anak) {
-                        return DropdownMenuItem<int>(
-                          value: anak.id,
+                        return DropdownMenuItem<Object>(
+                          value: anak.id!,
                           child: Text(anak.nama),
                         );
                       }).toList(),

@@ -1,6 +1,6 @@
 class Pemeriksaan {
-  int? id;
-  int anakId;
+  Object? id;
+  Object anakId;
   String tanggal;
   double beratBadan;
   double tinggiBadan;
@@ -17,11 +17,10 @@ class Pemeriksaan {
 
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
-      'anakId': anakId,
+      'anak_id': anakId,
       'tanggal': tanggal,
-      'beratBadan': beratBadan,
-      'tinggiBadan': tinggiBadan,
+      'berat_badan': beratBadan,
+      'tinggi_badan': tinggiBadan,
       'catatan': catatan,
     };
   }
@@ -29,11 +28,17 @@ class Pemeriksaan {
   factory Pemeriksaan.fromMap(Map<String, dynamic> map) {
     return Pemeriksaan(
       id: map['id'],
-      anakId: map['anakId'],
-      tanggal: map['tanggal'],
-      beratBadan: map['beratBadan'],
-      tinggiBadan: map['tinggiBadan'],
-      catatan: map['catatan'],
+      anakId: map['anak_id'] ?? map['anakId'] ?? '',
+      tanggal: map['tanggal']?.toString() ?? '',
+      beratBadan: double.tryParse(
+            (map['berat_badan'] ?? map['beratBadan'] ?? 0).toString(),
+          ) ??
+          0,
+      tinggiBadan: double.tryParse(
+            (map['tinggi_badan'] ?? map['tinggiBadan'] ?? 0).toString(),
+          ) ??
+          0,
+      catatan: map['catatan']?.toString() ?? '',
     );
   }
 }

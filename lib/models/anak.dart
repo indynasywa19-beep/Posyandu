@@ -1,5 +1,5 @@
 class Anak {
-  int? id;
+  Object? id;
   String nama;
   String nik;
   String tanggalLahir;
@@ -20,8 +20,8 @@ class Anak {
       'id': id,
       'nama': nama,
       'nik': nik,
-      'tanggalLahir': tanggalLahir,
-      'jenisKelamin': jenisKelamin,
+      'tanggal_lahir': tanggalLahir,
+      'jenis_kelamin': jenisKelamin,
     };
   }
 
@@ -29,10 +29,12 @@ class Anak {
   factory Anak.fromMap(Map<String, dynamic> map) {
     return Anak(
       id: map['id'],
-      nama: map['nama'],
-      nik: map['nik'],
-      tanggalLahir: map['tanggalLahir'],
-      jenisKelamin: map['jenisKelamin'],
+      nama: map['nama']?.toString() ?? '',
+      nik: map['nik']?.toString() ?? '',
+      tanggalLahir:
+          (map['tanggal_lahir'] ?? map['tanggalLahir'])?.toString() ?? '',
+      jenisKelamin:
+          (map['jenis_kelamin'] ?? map['jenisKelamin'])?.toString() ?? '',
     );
   }
 }

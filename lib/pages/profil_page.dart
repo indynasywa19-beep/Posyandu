@@ -1,214 +1,243 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-class ProfilPage extends StatelessWidget {
+import 'login_page.dart';
+
+class ProfilPage extends StatefulWidget {
   const ProfilPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5FFF7),
+  State<ProfilPage> createState() => _ProfilPageState();
+}
 
+class _ProfilPageState extends State<ProfilPage> {
+  final _nameController = TextEditingController();
+  bool _isSaving = false;
+
+  User? get _user => Supabase.instance.client.auth.currentUser;
+
+  @override
+  void initState() {
+    super.initState();
+    final user = _user;
+    final metadataName =
+        user?.userMetadata?['display_name'] ?? user?.userMetadata?['full_name'];
+    _nameController.text = metadataName is String ? metadataName : '';
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveProfile() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      _showMessage('Nama lengkap tidak boleh kosong.', isError: true);
+      return;
+    }
+    setState(() => _isSaving = true);
+    try {
+      await Supabase.instance.client.auth.updateUser(
+        UserAttributes(data: {'display_name': name}),
+      );
+      _showMessage('Profil berhasil diperbarui.');
+    } catch (error) {
+      _showMessage('Gagal memperbarui profil: $error', isError: true);
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _logout() async {
+    try {
+      await Supabase.instance.client.auth.signOut();
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+        (_) => false,
+      );
+    } catch (error) {
+      _showMessage('Gagal keluar dari akun: $error', isError: true);
+    }
+  }
+
+  void _showMessage(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: isError ? Colors.red.shade700 : null,
+        ),
+      );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = _user;
+    final email = user?.email ?? '-';
+    final isKader = email.toLowerCase() == 'kader@gmail.com';
+    final accentColor = isKader
+        ? const Color(0xFF173B72)
+        : const Color(0xFF13835F);
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('Profil'),
-        backgroundColor: Colors.green,
+        title: const Text('Profil Saya'),
+        backgroundColor: accentColor,
         foregroundColor: Colors.white,
       ),
-
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // FOTO PROFIL
             Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(25),
+              padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
+                gradient: LinearGradient(
+                  colors: [
+                    accentColor,
+                    isKader
+                        ? const Color(0xFF148C91)
+                        : const Color(0xFF49AD83),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(26),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
+                    color: accentColor.withValues(alpha: 0.12),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
                   ),
                 ],
               ),
               child: Column(
                 children: [
-                  Container(
-                    width: 90,
-                    height: 90,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE0F2E5),
-                      borderRadius: BorderRadius.circular(45),
-                    ),
+                  CircleAvatar(
+                    radius: 42,
+                    backgroundColor: Colors.white.withValues(alpha: 0.2),
                     child: const Icon(
-                      Icons.person,
-                      size: 55,
-                      color: Colors.green,
+                      Icons.person_rounded,
+                      size: 46,
+                      color: Colors.white,
                     ),
                   ),
-
-                  const SizedBox(height: 15),
-
-                  const Text(
-                    'Indy Nasywa',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  const SizedBox(height: 12),
+                  Text(
+                    _nameController.text.isEmpty
+                        ? 'Profil SI-Posyandu'
+                        : _nameController.text,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 21,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-
-                  const SizedBox(height: 5),
-
-                  const Text(
-                    'Orang Tua / Wali',
-                    style: TextStyle(color: Colors.grey),
+                  const SizedBox(height: 4),
+                  Text(
+                    isKader ? 'Kader Posyandu' : 'Orang Tua / Wali',
+                    style: const TextStyle(color: Colors.white70),
                   ),
                 ],
               ),
             ),
-
-            const SizedBox(height: 20),
-
-            // INFORMASI AKUN
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Informasi Akun',
-                style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
-              ),
+            const SizedBox(height: 24),
+            const Text(
+              'Informasi Akun',
+              style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
             ),
-
             const SizedBox(height: 12),
-
-            _buildMenu(
-              icon: Icons.person_outline,
-              title: 'Nama Lengkap',
-              subtitle: 'Indy Nasywa',
-            ),
-
-            const SizedBox(height: 10),
-
-            _buildMenu(
-              icon: Icons.email_outlined,
-              title: 'Email',
-              subtitle: 'indy@email.com',
-            ),
-
-            const SizedBox(height: 10),
-
-            _buildMenu(
-              icon: Icons.phone_outlined,
-              title: 'Nomor Telepon',
-              subtitle: '08xxxxxxxxxx',
-            ),
-
-            const SizedBox(height: 20),
-
-            // DATA ANAK
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Data Anak',
-                style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            _buildMenu(
-              icon: Icons.child_care,
-              title: 'Aisyah Putri',
-              subtitle: '3 Tahun • Perempuan',
-            ),
-
-            const SizedBox(height: 20),
-
-            // TOMBOL EDIT
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.edit_outlined),
-                label: const Text('Edit Profil'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+            TextField(
+              controller: _nameController,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(
+                labelText: 'Nama Lengkap',
+                prefixIcon: const Icon(Icons.person_outline),
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  borderSide: BorderSide.none,
                 ),
               ),
+              onChanged: (_) => setState(() {}),
             ),
-
             const SizedBox(height: 12),
-
-            // TOMBOL LOGOUT
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.pop(context);
-                },
-                icon: const Icon(Icons.logout),
-                label: const Text('Keluar'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.red,
-                  side: const BorderSide(color: Colors.red),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.email_outlined, color: accentColor),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Email',
+                          style: TextStyle(
+                            color: Colors.blueGrey,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          email,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
                   ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+            SizedBox(
+              height: 52,
+              child: FilledButton.icon(
+                onPressed: _isSaving ? null : _saveProfile,
+                style: FilledButton.styleFrom(backgroundColor: accentColor),
+                icon: _isSaving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Icon(Icons.save_outlined),
+                label: Text(_isSaving ? 'Menyimpan...' : 'Simpan Profil'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _logout,
+              icon: const Icon(Icons.logout_rounded),
+              label: const Text('Keluar'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red.shade700,
+                minimumSize: const Size.fromHeight(50),
+                side: BorderSide(color: Colors.red.shade200),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
                 ),
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildMenu({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-  }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 45,
-            height: 45,
-            decoration: BoxDecoration(
-              color: const Color(0xFFE0F2E5),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: Colors.green),
-          ),
-
-          const SizedBox(width: 15),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-
-                const SizedBox(height: 3),
-
-                Text(subtitle, style: const TextStyle(color: Colors.grey)),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

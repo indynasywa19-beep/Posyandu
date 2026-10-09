@@ -1,6 +1,6 @@
 class Imunisasi {
-  int? id;
-  int anakId;
+  Object? id;
+  Object anakId;
   String namaVaksin;
   String tanggal;
   String keterangan;
@@ -16,9 +16,8 @@ class Imunisasi {
   // Mengubah data menjadi Map untuk disimpan ke database
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
-      'anakId': anakId,
-      'namaVaksin': namaVaksin,
+      'anak_id': anakId,
+      'nama_vaksin': namaVaksin,
       'tanggal': tanggal,
       'keterangan': keterangan,
     };
@@ -28,10 +27,10 @@ class Imunisasi {
   factory Imunisasi.fromMap(Map<String, dynamic> map) {
     return Imunisasi(
       id: map['id'],
-      anakId: map['anakId'],
-      namaVaksin: map['namaVaksin'],
-      tanggal: map['tanggal'],
-      keterangan: map['keterangan'] ?? '',
+      anakId: map['anak_id'] ?? map['anakId'] ?? '',
+      namaVaksin: map['nama_vaksin'] ?? map['namaVaksin'] ?? '',
+      tanggal: map['tanggal']?.toString() ?? '',
+      keterangan: map['keterangan']?.toString() ?? '',
     );
   }
 }

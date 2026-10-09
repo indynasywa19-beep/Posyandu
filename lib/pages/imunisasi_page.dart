@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../database/database_helper.dart';
 import '../models/anak.dart';
 import '../models/imunisasi.dart';
 
@@ -25,13 +25,14 @@ class _ImunisasiPageState extends State<ImunisasiPage> {
 
   Future<void> loadData() async {
     try {
-      final dataAnakDb = await DatabaseHelper.instance.getAllAnak();
-
-      final dataImunisasiDb = await DatabaseHelper.instance.getAllImunisasi();
-
-      final anakList = dataAnakDb.map((item) => Anak.fromMap(item)).toList();
-
-      final imunisasiList = dataImunisasiDb
+      final supabase = Supabase.instance.client;
+      final dataAnakRows = await supabase.from('anak').select().order('nama');
+      final dataImunisasiRows = await supabase
+          .from('imunisasi')
+          .select()
+          .order('tanggal', ascending: false);
+      final anakList = dataAnakRows.map((item) => Anak.fromMap(item)).toList();
+      final imunisasiList = dataImunisasiRows
           .map((item) => Imunisasi.fromMap(item))
           .toList();
 
@@ -49,12 +50,13 @@ class _ImunisasiPageState extends State<ImunisasiPage> {
         isLoading = false;
       });
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Gagal mengambil data: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gagal mengambil data: $e')));
     }
   }
 
-  String namaAnak(int anakId) {
+  String namaAnak(Object anakId) {
     final anak = dataAnak.firstWhere(
       (item) => item.id == anakId,
       orElse: () => Anak(
@@ -77,7 +79,7 @@ class _ImunisasiPageState extends State<ImunisasiPage> {
       return;
     }
 
-    int selectedAnak = imunisasi?.anakId ?? dataAnak.first.id!;
+    Object selectedAnak = imunisasi?.anakId ?? dataAnak.first.id!;
 
     final tanggalController = TextEditingController(
       text: imunisasi?.tanggal ?? '',
@@ -104,15 +106,15 @@ class _ImunisasiPageState extends State<ImunisasiPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // PILIH ANAK
-                    DropdownButtonFormField<int>(
-                      value: selectedAnak,
+                    DropdownButtonFormField<Object>(
+                      initialValue: selectedAnak,
                       decoration: const InputDecoration(
                         labelText: 'Pilih Anak',
                         prefixIcon: Icon(Icons.child_care),
                       ),
                       items: dataAnak.map((anak) {
-                        return DropdownMenuItem<int>(
-                          value: anak.id,
+                        return DropdownMenuItem<Object>(
+                          value: anak.id!,
                           child: Text(anak.nama),
                         );
                       }).toList(),
@@ -129,7 +131,7 @@ class _ImunisasiPageState extends State<ImunisasiPage> {
 
                     // JENIS VAKSIN
                     DropdownButtonFormField<String>(
-                      value: selectedVaksin,
+                      initialValue: selectedVaksin,
                       decoration: const InputDecoration(
                         labelText: 'Jenis Vaksin',
                         prefixIcon: Icon(Icons.vaccines_outlined),
@@ -163,11 +165,29 @@ class _ImunisasiPageState extends State<ImunisasiPage> {
                     // TANGGAL
                     TextField(
                       controller: tanggalController,
+                      readOnly: true,
                       decoration: const InputDecoration(
                         labelText: 'Tanggal Imunisasi',
                         prefixIcon: Icon(Icons.calendar_today),
-                        hintText: 'Contoh: 12 Oktober 2026',
+                        hintText: 'Pilih tanggal',
                       ),
+                      onTap: () async {
+                        final now = DateTime.now();
+                        final selected = await showDatePicker(
+                          context: context,
+                          initialDate:
+                              DateTime.tryParse(tanggalController.text) ?? now,
+                          firstDate: DateTime(1900),
+                          lastDate: DateTime(now.year + 5),
+                        );
+                        if (selected == null) return;
+                        setDialogState(() {
+                          tanggalController.text =
+                              '${selected.year.toString().padLeft(4, '0')}-'
+                              '${selected.month.toString().padLeft(2, '0')}-'
+                              '${selected.day.toString().padLeft(2, '0')}';
+                        });
+                      },
                     ),
 
                     const SizedBox(height: 15),
@@ -212,18 +232,28 @@ class _ImunisasiPageState extends State<ImunisasiPage> {
                       keterangan: keteranganController.text,
                     );
 
-                    if (imunisasi == null) {
-                      await DatabaseHelper.instance.insertImunisasi(
-                        data.toMap(),
+                    try {
+                      if (imunisasi == null) {
+                        await Supabase.instance.client
+                            .from('imunisasi')
+                            .insert(data.toMap());
+                      } else {
+                        await Supabase.instance.client
+                            .from('imunisasi')
+                            .update(data.toMap())
+                            .eq('id', imunisasi.id!);
+                      }
+                    } catch (error) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Gagal menyimpan imunisasi: $error'),
+                        ),
                       );
-                    } else {
-                      await DatabaseHelper.instance.updateImunisasi(
-                        imunisasi.id!,
-                        data.toMap(),
-                      );
+                      return;
                     }
 
-                    if (!mounted) return;
+                    if (!context.mounted) return;
 
                     Navigator.pop(context);
 
@@ -262,13 +292,20 @@ class _ImunisasiPageState extends State<ImunisasiPage> {
 
             TextButton(
               onPressed: () async {
-                await DatabaseHelper.instance.deleteImunisasi(imunisasi.id!);
-
-                if (!mounted) return;
-
-                Navigator.pop(context);
-
-                await loadData();
+                try {
+                  await Supabase.instance.client
+                      .from('imunisasi')
+                      .delete()
+                      .eq('id', imunisasi.id!);
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
+                  await loadData();
+                } catch (error) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Gagal menghapus data: $error')),
+                  );
+                }
               },
               child: const Text('Hapus', style: TextStyle(color: Colors.red)),
             ),

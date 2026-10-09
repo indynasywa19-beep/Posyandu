@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'pages/login_page.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(
+    url: 'https://qbkddqhxatkfpxqrzzri.supabase.co',
+    publishableKey: 'sb_publishable_oBV6wIFcCH6rJZ3Aa_VgSg_Y-lkjiMC',
+  );
+
   runApp(const SiPosyanduApp());
 }
 
