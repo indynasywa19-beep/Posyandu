@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../widgets/menu_card.dart';
+import '../widgets/app_theme.dart';
+import '../widgets/kader_widgets.dart';
 import 'data_anak_page.dart';
 import 'imunisasi_page.dart';
 import 'jadwal_page.dart';
 import 'login_page.dart';
 import 'pemeriksaan_page.dart';
 import 'profil_page.dart';
+import 'riwayat_page.dart';
 
 class HomeKaderPage extends StatefulWidget {
   const HomeKaderPage({super.key});
@@ -17,10 +20,6 @@ class HomeKaderPage extends StatefulWidget {
 }
 
 class _HomeKaderPageState extends State<HomeKaderPage> {
-  static const _primary = Color(0xFF173B72);
-  static const _accent = Color(0xFF148C91);
-  static const _background = Color(0xFFF8FAFC);
-
   late Future<int> _childCount;
   late RealtimeChannel _childrenChannel;
   bool _realtimeErrorReported = false;
@@ -107,259 +106,210 @@ class _HomeKaderPageState extends State<HomeKaderPage> {
     }
   }
 
+  void _onNavigationTap(BuildContext context, int index) {
+    final page = switch (index) {
+      1 => const DataAnakPage(isKader: true),
+      2 => const JadwalPage(isKader: true),
+      3 => const ProfilPage(),
+      _ => null,
+    };
+    if (page != null) _open(context, page);
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = Supabase.instance.client.auth.currentUser;
-    final rawName = user?.userMetadata?['display_name'];
+    final rawName = user?.userMetadata?['display_name'] ??
+        user?.userMetadata?['full_name'];
     final name = rawName is String && rawName.trim().isNotEmpty
         ? rawName.trim()
-        : 'Kader Posyandu';
-    return Scaffold(
-      backgroundColor: _background,
-      appBar: AppBar(
-        backgroundColor: _primary,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: const Text(
-          'SI-Posyandu',
-          style: TextStyle(fontWeight: FontWeight.w700),
+        : 'Kader';
+
+    return Theme(
+      data: AppTheme.kader.copyWith(
+        snackBarTheme: const SnackBarThemeData(
+          behavior: SnackBarBehavior.floating,
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Keluar akun',
-            onPressed: () => _logout(context),
-            icon: const Icon(Icons.logout_rounded),
-          ),
-        ],
       ),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _refresh,
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Halo, $name!',
-                  style: const TextStyle(
-                    color: _primary,
-                    fontSize: 27,
-                    fontWeight: FontWeight.w800,
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        floatingActionButton: KaderCenterFab(
+          onPressed: () => _open(
+            context,
+            const PemeriksaanPage(openFormOnStart: true),
+          ),
+        ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+        bottomNavigationBar: KaderBottomAppBar(
+          selectedIndex: 0,
+          onTabSelected: (index) => _onNavigationTap(context, index),
+        ),
+        body: SafeArea(
+          child: RefreshIndicator(
+            onRefresh: _refresh,
+            color: const Color(0xFF1D4ED8),
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 1. Header greeting & logout
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Halo, $name!',
+                              style: GoogleFonts.fredoka(
+                                color: const Color(0xFF0F172A),
+                                fontSize: 24,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Posyandu · Layanan hari ini',
+                              style: GoogleFonts.nunito(
+                                color: const Color(0xFF64748B),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      KaderLogoutButton(onPressed: () => _logout(context)),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Pantau layanan dan pertumbuhan anak di Posyandu.',
-                  style: TextStyle(
-                    color: Colors.blueGrey.shade600,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                FutureBuilder<int>(
-                  future: _childCount,
-                  builder: (context, snapshot) {
-                    if (snapshot.hasError) {
-                      return _SummaryCard(
-                        title: 'Ringkasan Monitoring',
-                        message: 'Gagal memuat data anak: ${snapshot.error}',
-                        icon: Icons.cloud_off_outlined,
+                  const SizedBox(height: 18),
+
+                  // 2. Hero Card
+                  FutureBuilder<int>(
+                    future: _childCount,
+                    builder: (context, snapshot) {
+                      final now = DateTime.now();
+                      const months = [
+                        'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+                        'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'
+                      ];
+                      final dateLabel =
+                          'Kegiatan hari ini · ${now.day} ${months[now.month - 1]}';
+
+                      final countText = snapshot.hasError
+                          ? 'Data belum tersedia'
+                          : !snapshot.hasData
+                              ? 'Memuat data anak...'
+                              : '${snapshot.data} anak terdaftar';
+
+                      return KaderHeroCard(
+                        dateLabel: dateLabel,
+                        countText: countText,
+                        onActionPressed: () => _open(
+                          context,
+                          const PemeriksaanPage(openFormOnStart: true),
+                        ),
                       );
-                    }
-                    if (!snapshot.hasData) {
-                      return const _SummaryCard(
-                        title: 'Ringkasan Monitoring',
-                        message: 'Memuat data seluruh anak...',
-                        icon: Icons.groups_2_outlined,
-                      );
-                    }
-                    return _SummaryCard(
-                      title: 'Monitoring Seluruh Anak',
-                      message: '${snapshot.data!} anak terdaftar',
-                      icon: Icons.groups_2_outlined,
-                    );
-                  },
-                ),
-                const SizedBox(height: 26),
-                const Text(
-                  'Menu Utama',
-                  style: TextStyle(
-                    color: _primary,
-                    fontSize: 19,
-                    fontWeight: FontWeight.w800,
+                    },
                   ),
-                ),
-                const SizedBox(height: 14),
-                GridView.count(
-                  crossAxisCount: 2,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: 14,
-                  crossAxisSpacing: 14,
-                  childAspectRatio: 0.98,
-                  children: [
-                    MenuCard(
-                      title: 'Monitoring Anak',
-                      subtitle: 'Lihat data seluruh anak',
-                      icon: Icons.child_care_rounded,
-                      accentColor: _primary,
-                      onTap: () =>
-                          _open(context, const DataAnakPage(isKader: true)),
-                    ),
-                    MenuCard(
-                      title: 'Pencatatan Gizi',
-                      subtitle: 'Catat hasil pemeriksaan bulanan',
-                      icon: Icons.monitor_weight_outlined,
-                      accentColor: _accent,
-                      onTap: () => _open(context, const PemeriksaanPage()),
-                    ),
-                    MenuCard(
-                      title: 'Imunisasi',
-                      subtitle: 'Kelola riwayat vaksinasi',
-                      icon: Icons.vaccines_outlined,
-                      accentColor: const Color(0xFF3567B7),
-                      onTap: () => _open(context, const ImunisasiPage()),
-                    ),
-                    MenuCard(
-                      title: 'Jadwal Posyandu',
-                      subtitle: 'Atur kegiatan dan waktu layanan',
-                      icon: Icons.calendar_month_rounded,
-                      accentColor: _accent,
-                      onTap: () =>
-                          _open(context, const JadwalPage(isKader: true)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-                _ProfileLink(
-                  accentColor: _primary,
-                  onTap: () => _open(context, const ProfilPage()),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
+                  const SizedBox(height: 14),
 
-class _SummaryCard extends StatelessWidget {
-  final String title;
-  final String message;
-  final IconData icon;
-
-  const _SummaryCard({
-    required this.title,
-    required this.message,
-    required this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF173B72), Color(0xFF168B91)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(26),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF173B72).withValues(alpha: 0.12),
-            blurRadius: 22,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          const SizedBox(width: 4),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                  // 3. Search Bar Pill
+                  KaderSearchBar(
+                    hintText: 'Cari nama anak atau NIK',
+                    onTap: () => _open(
+                      context,
+                      const DataAnakPage(isKader: true),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  message,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 19,
-                    fontWeight: FontWeight.w800,
+                  const SizedBox(height: 24),
+
+                  // 4. Layanan Section Title
+                  Text(
+                    'Layanan',
+                    style: GoogleFonts.fredoka(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF0F172A),
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Icon(icon, size: 42, color: Colors.white.withValues(alpha: 0.9)),
-        ],
-      ),
-    );
-  }
-}
+                  const SizedBox(height: 14),
 
-class _ProfileLink extends StatelessWidget {
-  final Color accentColor;
-  final VoidCallback onTap;
-
-  const _ProfileLink({required this.accentColor, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(22),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(22),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
+                  // 5. Layanan 2x3 Grid
+                  GridView.count(
+                    crossAxisCount: 3,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    mainAxisExtent: 110,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 14,
+                    children: [
+                      KaderMenuBubble(
+                        icon: Icons.groups_outlined,
+                        label: 'Monitoring Anak',
+                        backgroundColor: const Color(0xFFDBEAFE),
+                        iconColor: const Color(0xFF1D4ED8),
+                        onTap: () => _open(
+                          context,
+                          const DataAnakPage(isKader: true),
+                        ),
+                      ),
+                      KaderMenuBubble(
+                        icon: Icons.monitor_weight_outlined,
+                        label: 'Catat Gizi',
+                        backgroundColor: const Color(0xFFD1FAE5),
+                        iconColor: const Color(0xFF047857),
+                        onTap: () => _open(
+                          context,
+                          const PemeriksaanPage(openFormOnStart: true),
+                        ),
+                      ),
+                      KaderMenuBubble(
+                        icon: Icons.vaccines_outlined,
+                        label: 'Imunisasi',
+                        backgroundColor: const Color(0xFFFFE4D6),
+                        iconColor: const Color(0xFFC2410C),
+                        onTap: () => _open(
+                          context,
+                          const ImunisasiPage(openFormOnStart: true),
+                        ),
+                      ),
+                      KaderMenuBubble(
+                        icon: Icons.calendar_month_outlined,
+                        label: 'Jadwal',
+                        backgroundColor: const Color(0xFFFEF3C7),
+                        iconColor: const Color(0xFFB45309),
+                        onTap: () => _open(
+                          context,
+                          const JadwalPage(isKader: true),
+                        ),
+                      ),
+                      KaderMenuBubble(
+                        icon: Icons.history_rounded,
+                        label: 'Riwayat Global',
+                        backgroundColor: const Color(0xFFEDE9FE),
+                        iconColor: const Color(0xFF6D28D9),
+                        onTap: () => _open(
+                          context,
+                          const RiwayatPage(isKader: true),
+                        ),
+                      ),
+                      KaderMenuBubble(
+                        icon: Icons.person_outline_rounded,
+                        label: 'Profil',
+                        backgroundColor: const Color(0xFFFCE7F3),
+                        iconColor: const Color(0xFFBE185D),
+                        onTap: () => _open(context, const ProfilPage()),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.account_circle_outlined, color: accentColor, size: 28),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Profil Saya',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    SizedBox(height: 3),
-                    Text(
-                      'Kelola informasi akun',
-                      style: TextStyle(color: Colors.blueGrey, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right_rounded, color: Colors.blueGrey),
-            ],
+            ),
           ),
         ),
       ),

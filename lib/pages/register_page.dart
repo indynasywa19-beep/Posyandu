@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'auth_widgets.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -36,9 +38,7 @@ class _RegisterPageState extends State<RegisterPage> {
       final response = await Supabase.instance.client.auth.signUp(
         email: emailController.text.trim(),
         password: passwordController.text,
-        data: {
-          'display_name': nameController.text.trim(),
-        },
+        data: {'display_name': nameController.text.trim()},
       );
       if (response.session != null) {
         await Supabase.instance.client.auth.signOut();
@@ -74,146 +74,100 @@ class _RegisterPageState extends State<RegisterPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5FFF7),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.green),
-      ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Container(
-            width: 420,
-            padding: const EdgeInsets.all(30),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
+      backgroundColor: Colors.white,
+      body: AuthLayout(
+        headerHeight: 250,
+        title: 'Daftar Akun',
+        subtitle: 'Buat akun SI-POSYANDU baru',
+        onBack: () => Navigator.pop(context),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Yuk, bergabung!',
+                style: GoogleFonts.fredoka(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF0F172A),
                 ),
-              ],
-            ),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                children: [
-                  const Icon(
-                    Icons.person_add_alt_1,
-                    size: 75,
-                    color: Colors.green,
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'DAFTAR AKUN',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Buat akun SI-POSYANDU baru',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                  const SizedBox(height: 35),
-
-                  // Input Nama Lengkap
-                  TextFormField(
-                    controller: nameController,
-                    decoration: InputDecoration(
-                      labelText: 'Nama Lengkap',
-                      prefixIcon: const Icon(Icons.person_outline),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Nama tidak boleh kosong';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Input Email
-                  TextFormField(
-                    controller: emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: InputDecoration(
-                      labelText: 'Email',
-                      prefixIcon: const Icon(Icons.email_outlined),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Email tidak boleh kosong';
-                      }
-                      if (!value.contains('@')) {
-                        return 'Format email tidak valid';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Input Password
-                  TextFormField(
-                    controller: passwordController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Password tidak boleh kosong';
-                      }
-                      if (value.length < 6) {
-                        return 'Password minimal 6 karakter';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 25),
-
-                  // Tombol Daftar
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : register,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      child: _isLoading
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text(
-                              'DAFTAR',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                    ),
-                  ),
-                ],
               ),
-            ),
+              const SizedBox(height: 18),
+              AuthField(
+                controller: nameController,
+                hint: 'Nama lengkap',
+                icon: Icons.person_outline_rounded,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Nama tidak boleh kosong';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 14),
+              AuthField(
+                controller: emailController,
+                hint: 'Email',
+                icon: Icons.mail_outline_rounded,
+                keyboardType: TextInputType.emailAddress,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Email tidak boleh kosong';
+                  }
+                  if (!value.contains('@')) {
+                    return 'Format email tidak valid';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 14),
+              AuthField(
+                controller: passwordController,
+                hint: 'Password',
+                icon: Icons.lock_outline_rounded,
+                isPassword: true,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Password tidak boleh kosong';
+                  }
+                  if (value.length < 6) {
+                    return 'Password minimal 6 karakter';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 20),
+              GradientButton(
+                label: 'Daftar',
+                loading: _isLoading,
+                onPressed: _isLoading ? null : register,
+              ),
+              const SizedBox(height: 12),
+              Center(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text.rich(
+                    TextSpan(
+                      text: 'Sudah punya akun? ',
+                      style: GoogleFonts.nunito(
+                        fontSize: 14,
+                        color: const Color(0xFF475569),
+                      ),
+                      children: [
+                        TextSpan(
+                          text: 'Masuk',
+                          style: GoogleFonts.nunito(
+                            fontWeight: FontWeight.w700,
+                            color: kAuthBlue,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

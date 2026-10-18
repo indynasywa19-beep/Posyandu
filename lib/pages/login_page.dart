@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'auth_widgets.dart';
 import 'home_ortu_page.dart';
 import 'home_kader_page.dart';
 import 'register_page.dart';
@@ -95,114 +97,93 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5FFF7),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Container(
-            width: 420,
-            padding: const EdgeInsets.all(30),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
-                ),
-              ],
+      backgroundColor: Colors.white,
+      body: AuthLayout(
+        headerHeight: 330,
+        title: 'SI-POSYANDU',
+        subtitle: 'Sistem Informasi Posyandu',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Selamat datang',
+              style: GoogleFonts.fredoka(
+                fontSize: 24,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF0F172A),
+              ),
             ),
-            child: Column(
-              children: [
-                const Icon(
-                  Icons.health_and_safety,
-                  size: 75,
-                  color: Colors.green,
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'SI-POSYANDU',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Sistem Informasi Posyandu',
-                  style: TextStyle(color: Colors.grey),
-                ),
-                const SizedBox(height: 35),
-
-                TextField(
-                  controller: emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: InputDecoration(
-                    labelText: 'Email',
-                    prefixIcon: const Icon(Icons.email_outlined),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: passwordController,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 25),
-
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : login,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: _isLoading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text(
-                            'MASUK',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                TextButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const RegisterPage(),
-                      ),
-                    );
-                  },
-                  child: const Text(
-                    'Belum punya akun? Daftar Sekarang',
-                    style: TextStyle(color: Colors.green),
-                  ),
-                ),
-              ],
+            const SizedBox(height: 2),
+            Text(
+              'Masuk sebagai Kader atau Orang Tua',
+              style: GoogleFonts.nunito(
+                fontSize: 13.5,
+                color: const Color(0xFF475569),
+              ),
             ),
-          ),
+            const SizedBox(height: 20),
+            AuthField(
+              controller: emailController,
+              hint: 'Email',
+              icon: Icons.mail_outline_rounded,
+              keyboardType: TextInputType.emailAddress,
+            ),
+            const SizedBox(height: 14),
+            AuthField(
+              controller: passwordController,
+              hint: 'Password',
+              icon: Icons.lock_outline_rounded,
+              isPassword: true,
+            ),
+            const SizedBox(height: 20),
+            GradientButton(
+              label: 'Masuk',
+              loading: _isLoading,
+              onPressed: _isLoading ? null : login,
+            ),
+            const SizedBox(height: 12),
+            Center(
+              child: TextButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const RegisterPage(),
+                    ),
+                  );
+                },
+                child: Text.rich(
+                  TextSpan(
+                    text: 'Belum punya akun? ',
+                    style: GoogleFonts.nunito(
+                      fontSize: 14,
+                      color: const Color(0xFF475569),
+                    ),
+                    children: [
+                      TextSpan(
+                        text: 'Daftar sekarang',
+                        style: GoogleFonts.nunito(
+                          fontWeight: FontWeight.w700,
+                          color: kAuthGreen,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  RoleDot(color: kAuthBlue, label: 'Kader'),
+                  SizedBox(width: 18),
+                  RoleDot(color: kAuthGreen, label: 'Orang Tua'),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -1,5 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../widgets/app_theme.dart';
+import '../widgets/app_widgets.dart';
+import '../widgets/design_tokens.dart';
+import '../widgets/kader_widgets.dart';
+import 'artikel_page.dart';
+import 'data_anak_page.dart';
+import 'home_kader_page.dart';
+import 'home_ortu_page.dart';
+import 'login_page.dart';
+import 'pemeriksaan_page.dart';
+import 'profil_page.dart';
 
 class JadwalPage extends StatefulWidget {
   final bool isKader;
@@ -77,7 +90,8 @@ class _JadwalPageState extends State<JadwalPage> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
-          final ready = dateController.text.isNotEmpty &&
+          final ready =
+              dateController.text.isNotEmpty &&
               timeController.text.isNotEmpty &&
               locationController.text.trim().isNotEmpty &&
               !isSaving;
@@ -97,7 +111,8 @@ class _JadwalPageState extends State<JadwalPage> {
                     final now = DateTime.now();
                     final selected = await showDatePicker(
                       context: dialogContext,
-                      initialDate: DateTime.tryParse(dateController.text) ?? now,
+                      initialDate:
+                          DateTime.tryParse(dateController.text) ?? now,
                       firstDate: DateTime(now.year - 1),
                       lastDate: DateTime(now.year + 5),
                     );
@@ -145,9 +160,7 @@ class _JadwalPageState extends State<JadwalPage> {
             ),
             actions: [
               TextButton(
-                onPressed: isSaving
-                    ? null
-                    : () => Navigator.pop(dialogContext),
+                onPressed: isSaving ? null : () => Navigator.pop(dialogContext),
                 child: const Text('Batal'),
               ),
               FilledButton(
@@ -242,188 +255,543 @@ class _JadwalPageState extends State<JadwalPage> {
       );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final color = widget.isKader
-        ? const Color(0xFF173B72)
-        : const Color(0xFF13835F);
+  Future<void> _logout() async {
+    try {
+      await Supabase.instance.client.auth.signOut();
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+        (_) => false,
+      );
+    } catch (error) {
+      _showMessage('Gagal keluar dari akun: $error', isError: true);
+    }
+  }
+
+  void _onNavigationTap(BuildContext context, int index) {
+    final page = widget.isKader
+        ? switch (index) {
+            0 => const HomeKaderPage(),
+            1 => const DataAnakPage(isKader: true),
+            2 => const PemeriksaanPage(openFormOnStart: true),
+            4 => const ProfilPage(),
+            _ => null,
+          }
+        : switch (index) {
+            0 => const HomeOrtuPage(),
+            1 => const DataAnakPage(),
+            3 => const ArtikelPage(),
+            4 => const ProfilPage(),
+            _ => null,
+          };
+    if (page != null) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+    }
+  }
+
+  Widget _buildKader(BuildContext context) {
     final now = DateTime.now();
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: const Text('Jadwal Posyandu'),
-        backgroundColor: color,
-        foregroundColor: Colors.white,
-        actions: [
-          if (widget.isKader)
-            IconButton(
-              tooltip: 'Tambah jadwal',
-              onPressed: () => _editSchedule(),
-              icon: const Icon(Icons.add_box_outlined),
-            ),
-        ],
+    return Theme(
+      data: AppTheme.kader.copyWith(
+        snackBarTheme: const SnackBarThemeData(
+          behavior: SnackBarBehavior.floating,
+        ),
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadSchedules,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(20),
-          children: [
-            Text(
-              'Jadwal Bulan ${_monthNames[now.month - 1]} ${now.year}',
-              style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w800),
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        floatingActionButton: KaderCenterFab(
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const PemeriksaanPage(openFormOnStart: true),
             ),
-            const SizedBox(height: 5),
-            Text(
-              widget.isKader
-                  ? 'Kelola informasi kegiatan Posyandu.'
-                  : 'Informasi kegiatan Posyandu untuk keluarga.',
-              style: TextStyle(color: Colors.blueGrey.shade600),
-            ),
-            const SizedBox(height: 18),
-            if (_isLoading)
-              const Padding(
-                padding: EdgeInsets.all(36),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_loadError != null)
-              _EmptyState(
-                icon: Icons.cloud_off_outlined,
-                message: _loadError!,
-                color: color,
-                onRetry: _loadSchedules,
-              )
-            else if (_schedules.isEmpty)
-              _EmptyState(
-                icon: Icons.event_busy_outlined,
-                message: 'Belum ada jadwal Posyandu yang tersedia.',
-                color: color,
-                onRetry: _loadSchedules,
-              )
-            else
-              ..._schedules.map((schedule) {
-                final date = schedule['tanggal'] as String? ?? '-';
-                final time = schedule['waktu'] as String? ?? '-';
-                final location = schedule['lokasi'] as String? ?? '-';
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 14),
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.04),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+          ),
+        ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+        bottomNavigationBar: KaderBottomAppBar(
+          selectedIndex: 2,
+          onTabSelected: (index) {
+            final page = switch (index) {
+              0 => const HomeKaderPage(),
+              1 => const DataAnakPage(isKader: true),
+              3 => const ProfilPage(),
+              _ => null,
+            };
+            if (page != null) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => page),
+              );
+            }
+          },
+        ),
+        body: SafeArea(
+          child: RefreshIndicator(
+            onRefresh: _loadSchedules,
+            color: AppColors.kader,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(18, 14, 18, 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 48,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: color.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(16),
+                      IconButton(
+                        onPressed: () => Navigator.maybePop(context),
+                        icon: const Icon(
+                          Icons.chevron_left_rounded,
+                          size: 28,
+                          color: Color(0xFF0F172A),
+                        ),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 36,
+                          minHeight: 36,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Jadwal Posyandu',
+                              style: GoogleFonts.fredoka(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF0F172A),
+                              ),
                             ),
-                            child: Icon(
-                              Icons.calendar_month_rounded,
-                              color: color,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Kegiatan Posyandu',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '$date • $time',
-                                  style: TextStyle(
-                                    color: color,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (widget.isKader) ...[
-                            IconButton(
-                              tooltip: 'Edit jadwal',
-                              onPressed: () => _editSchedule(schedule: schedule),
-                              icon: const Icon(Icons.edit_outlined),
-                            ),
-                            IconButton(
-                              tooltip: 'Hapus jadwal',
-                              onPressed: () => _deleteSchedule(schedule),
-                              icon: const Icon(
-                                Icons.delete_outline,
-                                color: Colors.red,
+                            const SizedBox(height: 2),
+                            Text(
+                              '${_monthNames[now.month - 1]} ${now.year}',
+                              style: GoogleFonts.nunito(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF64748B),
                               ),
                             ),
                           ],
-                        ],
+                        ),
                       ),
-                      const Divider(height: 26),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.location_on_outlined,
-                            color: Colors.blueGrey,
+                      Material(
+                        color: AppColors.kader,
+                        shape: const CircleBorder(),
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          onTap: () => _editSchedule(),
+                          customBorder: const CircleBorder(),
+                          child: const SizedBox(
+                            width: 38,
+                            height: 38,
+                            child: Icon(
+                              Icons.add_rounded,
+                              color: Colors.white,
+                              size: 24,
+                            ),
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(child: Text(location)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      KaderLogoutButton(onPressed: _logout),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const KaderInfoPill(
+                    icon: Icons.edit_note_rounded,
+                    message: 'Kamu bisa tambah, ubah & hapus jadwal',
+                  ),
+                  const SizedBox(height: 18),
+                  if (_isLoading)
+                    const Padding(
+                      padding: EdgeInsets.all(40),
+                      child: Center(
+                        child: CircularProgressIndicator(color: AppColors.kader),
+                      ),
+                    )
+                  else if (_loadError != null)
+                    _EmptyState(
+                      icon: Icons.cloud_off_outlined,
+                      message: _loadError!,
+                      color: AppColors.kader,
+                      onRetry: _loadSchedules,
+                    )
+                  else if (_schedules.isEmpty)
+                    _EmptyState(
+                      icon: Icons.event_busy_outlined,
+                      message: 'Belum ada jadwal Posyandu yang tersedia.',
+                      color: AppColors.kader,
+                      onRetry: _loadSchedules,
+                    )
+                  else
+                    ..._schedules.map((schedule) {
+                      final date = schedule['tanggal'] as String? ?? '-';
+                      final time = schedule['waktu'] as String? ?? '-';
+                      final location = schedule['lokasi'] as String? ?? '-';
+                      final parsedDate = DateTime.tryParse(date);
+                      final day = parsedDate == null
+                          ? date
+                          : '${parsedDate.day.toString().padLeft(2, '0')}\n'
+                                '${_monthNames[parsedDate.month - 1].substring(0, 3)}';
+                      return Column(
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 48,
+                                height: 52,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFEF3C7),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  day,
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.nunito(
+                                    color: const Color(0xFFB45309),
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13,
+                                    height: 1.1,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Posyandu',
+                                      style: GoogleFonts.nunito(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 14,
+                                        color: const Color(0xFF0F172A),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      '$location · $time',
+                                      style: GoogleFonts.nunito(
+                                        color: const Color(0xFF64748B),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Material(
+                                color: const Color(0xFFDBEAFE),
+                                shape: const CircleBorder(),
+                                clipBehavior: Clip.antiAlias,
+                                child: InkWell(
+                                  onTap: () =>
+                                      _editSchedule(schedule: schedule),
+                                  customBorder: const CircleBorder(),
+                                  child: const SizedBox(
+                                    width: 36,
+                                    height: 36,
+                                    child: Icon(
+                                      Icons.edit_outlined,
+                                      size: 18,
+                                      color: Color(0xFF1D4ED8),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Material(
+                                color: const Color(0xFFFFE4E6),
+                                shape: const CircleBorder(),
+                                clipBehavior: Clip.antiAlias,
+                                child: InkWell(
+                                  onTap: () => _deleteSchedule(schedule),
+                                  customBorder: const CircleBorder(),
+                                  child: const SizedBox(
+                                    width: 36,
+                                    height: 36,
+                                    child: Icon(
+                                      Icons.delete_outline_rounded,
+                                      size: 18,
+                                      color: Color(0xFFBE123C),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          const KaderDashedDivider(),
+                          const SizedBox(height: 12),
                         ],
+                      );
+                    }),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.isKader) {
+      return _buildKader(context);
+    }
+    final color = widget.isKader ? AppColors.kader : AppColors.parent;
+    final now = DateTime.now();
+    return Theme(
+      data: widget.isKader ? AppTheme.kader : AppTheme.parent,
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          title: const Text('Jadwal Posyandu'),
+          actions: [
+            if (widget.isKader)
+              IconButton(
+                tooltip: 'Tambah jadwal',
+                onPressed: () => _editSchedule(),
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.kader,
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.add_rounded),
+              ),
+            const SizedBox(width: 12),
+          ],
+        ),
+        body: RefreshIndicator(
+          onRefresh: _loadSchedules,
+          color: color,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+            children: [
+              Text(
+                'Jadwal Posyandu',
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              Text(
+                '${_monthNames[now.month - 1]} ${now.year}',
+                style: const TextStyle(color: AppColors.secondaryText),
+              ),
+              if (!widget.isKader) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.parentSoft,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.lock_outline_rounded,
+                        size: 15,
+                        color: AppColors.parent,
+                      ),
+                      SizedBox(width: 6),
+                      Text(
+                        'Hanya bisa dilihat · dibuat oleh Kader',
+                        style: TextStyle(
+                          color: AppColors.parent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ],
                   ),
-                );
-              }),
-            const SizedBox(height: 14),
-            const Text(
-              'Kegiatan Layanan',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 12),
-            _activity(Icons.monitor_weight_outlined, 'Penimbangan'),
-            _activity(Icons.height_rounded, 'Pengukuran tinggi badan'),
-            _activity(Icons.vaccines_outlined, 'Imunisasi'),
-            _activity(Icons.medical_services_outlined, 'Pemeriksaan kesehatan'),
-          ],
+                ),
+              ] else ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Kelola jadwal dan lokasi kegiatan Posyandu.',
+                  style: TextStyle(color: AppColors.secondaryText),
+                ),
+              ],
+              const SizedBox(height: 14),
+              if (_isLoading)
+                const Padding(
+                  padding: EdgeInsets.all(36),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_loadError != null)
+                _EmptyState(
+                  icon: Icons.cloud_off_outlined,
+                  message: _loadError!,
+                  color: color,
+                  onRetry: _loadSchedules,
+                )
+              else if (_schedules.isEmpty)
+                _EmptyState(
+                  icon: Icons.event_busy_outlined,
+                  message: 'Belum ada jadwal Posyandu yang tersedia.',
+                  color: color,
+                  onRetry: _loadSchedules,
+                )
+              else
+                ..._schedules.map((schedule) {
+                  final date = schedule['tanggal'] as String? ?? '-';
+                  final time = schedule['waktu'] as String? ?? '-';
+                  final location = schedule['lokasi'] as String? ?? '-';
+                  final parsedDate = DateTime.tryParse(date);
+                  final day = parsedDate == null
+                      ? date
+                      : '${parsedDate.day.toString().padLeft(2, '0')}\n'
+                            '${_monthNames[parsedDate.month - 1].substring(0, 3)}';
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 48,
+                              height: 52,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEF3C7),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                day,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: Color(0xFFB45309),
+                                  fontWeight: FontWeight.w800,
+                                  height: 1.1,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Posyandu',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    '$location · $time',
+                                    style: const TextStyle(
+                                      color: AppColors.secondaryText,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (widget.isKader) ...[
+                              IconButton(
+                                tooltip: 'Ubah jadwal',
+                                onPressed: () =>
+                                    _editSchedule(schedule: schedule),
+                                style: IconButton.styleFrom(
+                                  backgroundColor: AppColors.kaderMid,
+                                  foregroundColor: AppColors.kader,
+                                ),
+                                icon: const Icon(Icons.edit_outlined, size: 18),
+                              ),
+                              const SizedBox(width: 4),
+                              IconButton(
+                                tooltip: 'Hapus jadwal',
+                                onPressed: () => _deleteSchedule(schedule),
+                                style: IconButton.styleFrom(
+                                  backgroundColor: AppColors.logoutBackground,
+                                  foregroundColor: AppColors.logoutForeground,
+                                ),
+                                icon: const Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 18,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        const _DashedDivider(),
+                      ],
+                    ),
+                  );
+                }),
+              const SizedBox(height: 14),
+              const Text(
+                'Kegiatan Layanan',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 10),
+              _activity(Icons.monitor_weight_outlined, 'Penimbangan'),
+              _activity(Icons.height_rounded, 'Pengukuran tinggi badan'),
+              _activity(Icons.vaccines_outlined, 'Imunisasi'),
+              _activity(
+                Icons.medical_services_outlined,
+                'Pemeriksaan kesehatan',
+              ),
+            ],
+          ),
+        ),
+        bottomNavigationBar: AppBottomNav(
+          isKader: widget.isKader,
+          selectedIndex: widget.isKader ? 3 : 2,
+          onTap: (index) => _onNavigationTap(context, index),
         ),
       ),
     );
   }
 
   Widget _activity(IconData icon, String title) {
-    final color = widget.isKader
-        ? const Color(0xFF173B72)
-        : const Color(0xFF13835F);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-      ),
+    final color = widget.isKader ? AppColors.kader : AppColors.parent;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(
         children: [
           Icon(icon, color: color),
           const SizedBox(width: 12),
           Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
         ],
+      ),
+    );
+  }
+}
+
+class _DashedDivider extends StatelessWidget {
+  const _DashedDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 1,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final dashCount = (constraints.maxWidth / 7).floor();
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: List.generate(
+              dashCount,
+              (_) => const SizedBox(
+                width: 3,
+                height: 1,
+                child: ColoredBox(color: AppColors.divider),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

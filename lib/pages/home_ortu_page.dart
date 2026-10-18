@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../widgets/menu_card.dart';
+import '../widgets/app_theme.dart';
+import '../widgets/app_widgets.dart';
+import '../widgets/design_tokens.dart';
+import 'artikel_page.dart';
 import 'data_anak_page.dart';
 import 'jadwal_page.dart';
 import 'login_page.dart';
@@ -17,10 +20,6 @@ class HomeOrtuPage extends StatefulWidget {
 }
 
 class _HomeOrtuPageState extends State<HomeOrtuPage> {
-  static const _primary = Color(0xFF13835F);
-  static const _accent = Color(0xFF39A980);
-  static const _background = Color(0xFFF8FAFC);
-
   late Future<int> _childCount;
   late RealtimeChannel _childrenChannel;
   bool _realtimeErrorReported = false;
@@ -128,6 +127,17 @@ class _HomeOrtuPageState extends State<HomeOrtuPage> {
     }
   }
 
+  void _onNavigationTap(BuildContext context, int index) {
+    final page = switch (index) {
+      1 => const DataAnakPage(),
+      2 => const JadwalPage(),
+      3 => const ArtikelPage(),
+      4 => const ProfilPage(),
+      _ => null,
+    };
+    if (page != null) _open(context, page);
+  }
+
   Future<void> _logout(BuildContext context) async {
     try {
       await Supabase.instance.client.auth.signOut();
@@ -152,264 +162,260 @@ class _HomeOrtuPageState extends State<HomeOrtuPage> {
     final name = rawName is String && rawName.trim().isNotEmpty
         ? rawName.trim()
         : 'Orang Tua';
-    return Scaffold(
-      backgroundColor: _background,
-      appBar: AppBar(
-        backgroundColor: _primary,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: const Text(
-          'SI-Posyandu',
-          style: TextStyle(fontWeight: FontWeight.w700),
+    return Theme(
+      data: AppTheme.parent,
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          actions: [
+            IconButton(
+              tooltip: 'Notifikasi',
+              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Belum ada notifikasi baru.'),
+                ),
+              ),
+              style: IconButton.styleFrom(
+                backgroundColor: AppColors.parentSoft,
+                foregroundColor: AppColors.parent,
+              ),
+              icon: const Icon(Icons.notifications_none_rounded),
+            ),
+            LogoutButton(onPressed: () => _logout(context)),
+            const SizedBox(width: 12),
+          ],
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Keluar akun',
-            onPressed: () => _logout(context),
-            icon: const Icon(Icons.logout_rounded),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _refresh,
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Halo, $name!',
-                  style: const TextStyle(
-                    color: _primary,
-                    fontSize: 27,
-                    fontWeight: FontWeight.w800,
+        body: SafeArea(
+          child: RefreshIndicator(
+            onRefresh: _refresh,
+            color: AppColors.parent,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(18, 2, 18, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Selamat pagi,',
+                    style: TextStyle(color: AppColors.secondaryText),
                   ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Pantau tumbuh kembang si kecil dengan mudah.',
-                  style: TextStyle(
-                    color: Colors.blueGrey.shade600,
-                    fontSize: 14,
+                  Text(
+                    '$name!',
+                    style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 20),
-                FutureBuilder<int>(
-                  future: _childCount,
-                  builder: (context, snapshot) {
-                    if (snapshot.hasError) {
-                      return _ChildSummary(
-                        accentColor: _primary,
-                        title: 'Data Anak',
-                        message: 'Data belum dapat dimuat: ${snapshot.error}',
-                        icon: Icons.cloud_off_outlined,
+                  const SizedBox(height: 16),
+                  FutureBuilder<int>(
+                    future: _childCount,
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                        return HeroCard(
+                          color: AppColors.parent,
+                          child: Text(
+                            'Data anak gagal dimuat: ${snapshot.error}',
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        );
+                      }
+                      if (!snapshot.hasData) {
+                        return const HeroCard(
+                          color: AppColors.parent,
+                          child: SizedBox(
+                            height: 84,
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+                      final count = snapshot.data!;
+                      if (count == 0) {
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: AppColors.parentSoft,
+                            borderRadius: BorderRadius.circular(26),
+                          ),
+                          child: Column(
+                            children: [
+                              const ChildAvatar(size: 74),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'Belum ada data si kecil',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              const Text(
+                                'Tambahkan identitas anak terlebih dahulu '
+                                'untuk melihat perkembangannya.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: AppColors.secondaryText,
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                              FilledButton(
+                                onPressed: () => _open(
+                                  context,
+                                  const DataAnakPage(),
+                                ),
+                                child: const Text('Tambahkan data anak'),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      return HeroCard(
+                        color: AppColors.parent,
+                        child: Row(
+                          children: [
+                            const ChildAvatar(size: 56),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Data anak terdaftar',
+                                    style: TextStyle(color: Colors.white70),
+                                  ),
+                                  Text(
+                                    '$count anak',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () => _open(
+                                context,
+                                const DataAnakPage(),
+                              ),
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppColors.parent,
+                                backgroundColor: const Color(0xFFFFD84D),
+                              ),
+                              child: const Text('Lihat'),
+                            ),
+                          ],
+                        ),
                       );
-                    }
-                    if (!snapshot.hasData) {
-                      return const _ChildSummary(
-                        accentColor: _primary,
-                        title: 'Data Anak',
-                        message: 'Memuat data anak Anda...',
-                        icon: Icons.child_care_rounded,
-                      );
-                    }
-                    final count = snapshot.data!;
-                    return _ChildSummary(
-                      accentColor: _primary,
-                      title: count == 0 ? 'Data Anak Kosong' : 'Anak Terdaftar',
-                      message: count == 0
-                          ? 'Tambahkan identitas anak melalui menu Data Anak.'
-                          : '$count anak terdaftar',
-                      icon: count == 0
-                          ? Icons.info_outline_rounded
-                          : Icons.child_care_rounded,
-                    );
-                  },
-                ),
-                const SizedBox(height: 26),
-                const Text(
-                  'Layanan Keluarga',
-                  style: TextStyle(
-                    color: _primary,
-                    fontSize: 19,
-                    fontWeight: FontWeight.w800,
+                    },
                   ),
-                ),
-                const SizedBox(height: 14),
-                GridView.count(
-                  crossAxisCount: 2,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: 14,
-                  crossAxisSpacing: 14,
-                  childAspectRatio: 0.98,
-                  children: [
-                    MenuCard(
-                      title: 'Data Anak',
-                      subtitle: 'Daftarkan dan lihat anak Anda',
-                      icon: Icons.child_care_rounded,
-                      accentColor: _primary,
-                      onTap: () =>
-                          _open(context, const DataAnakPage(isKader: false)),
+                  const SizedBox(height: 22),
+                  const Text(
+                    'Layanan keluarga',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 12),
+                  GridView.count(
+                    crossAxisCount: 4,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 6,
+                    childAspectRatio: .72,
+                    children: [
+                      MenuBubble(
+                        icon: Icons.favorite_border_rounded,
+                        label: 'Data Anak',
+                        backgroundColor: AppColors.menuBubbles[4].$1,
+                        iconColor: AppColors.menuBubbles[4].$2,
+                        onTap: () => _open(context, const DataAnakPage()),
+                      ),
+                      MenuBubble(
+                        icon: Icons.show_chart_rounded,
+                        label: 'Grafik Tumbuh',
+                        backgroundColor: AppColors.menuBubbles[1].$1,
+                        iconColor: AppColors.menuBubbles[1].$2,
+                        onTap: () => _openChildFeature(
+                          context,
+                          const PerkembanganPage(),
+                        ),
+                      ),
+                      MenuBubble(
+                        icon: Icons.vaccines_outlined,
+                        label: 'Imunisasi Anak',
+                        backgroundColor: AppColors.menuBubbles[2].$1,
+                        iconColor: AppColors.menuBubbles[2].$2,
+                        onTap: () => _openChildFeature(
+                          context,
+                          const RiwayatPage(onlyVaccinations: true),
+                        ),
+                      ),
+                      MenuBubble(
+                        icon: Icons.history_rounded,
+                        label: 'Riwayat Anak',
+                        backgroundColor: AppColors.menuBubbles[3].$1,
+                        iconColor: AppColors.menuBubbles[3].$2,
+                        onTap: () => _openChildFeature(
+                          context,
+                          const RiwayatPage(),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Artikel untuk Bunda',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+                  InkWell(
+                    onTap: () => _open(context, const ArtikelPage()),
+                    borderRadius: BorderRadius.circular(18),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: AppColors.parentSoft,
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(
+                            Icons.article_outlined,
+                            color: AppColors.parent,
+                          ),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Belum ada artikel kesehatan yang tersedia.',
+                              style: TextStyle(
+                                color: AppColors.secondaryText,
+                              ),
+                            ),
+                          ),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            color: AppColors.secondaryText,
+                          ),
+                        ],
+                      ),
                     ),
-                    MenuCard(
-                      title: 'Grafik Tumbuh',
-                      subtitle: 'Pantau status KMS si kecil',
-                      icon: Icons.show_chart_rounded,
-                      accentColor: _accent,
-                      onTap: () =>
-                          _openChildFeature(context, const PerkembanganPage()),
-                    ),
-                    MenuCard(
-                      title: 'Jadwal Posyandu',
-                      subtitle: 'Lihat jadwal layanan terbaru',
-                      icon: Icons.calendar_month_rounded,
-                      accentColor: const Color(0xFF4E9E78),
-                      onTap: () => _open(context, const JadwalPage()),
-                    ),
-                    MenuCard(
-                      title: 'Riwayat Anak',
-                      subtitle: 'Lihat pemeriksaan dan imunisasi',
-                      icon: Icons.history_rounded,
-                      accentColor: const Color(0xFF548E82),
-                      onTap: () =>
-                          _openChildFeature(context, const RiwayatPage()),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-                _ProfileLink(
-                  accentColor: _primary,
-                  onTap: () => _open(context, const ProfilPage()),
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ChildSummary extends StatelessWidget {
-  final Color accentColor;
-  final String title;
-  final String message;
-  final IconData icon;
-
-  const _ChildSummary({
-    required this.accentColor,
-    required this.title,
-    required this.message,
-    required this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF178862), Color(0xFF57B991)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(26),
-        boxShadow: [
-          BoxShadow(
-            color: accentColor.withValues(alpha: 0.12),
-            blurRadius: 22,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  message,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    height: 1.35,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Icon(icon, size: 40, color: Colors.white.withValues(alpha: 0.9)),
-        ],
-      ),
-    );
-  }
-}
-
-class _ProfileLink extends StatelessWidget {
-  final Color accentColor;
-  final VoidCallback onTap;
-
-  const _ProfileLink({required this.accentColor, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(22),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(22),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.account_circle_outlined, color: accentColor, size: 28),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Profil Saya',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    SizedBox(height: 3),
-                    Text(
-                      'Kelola informasi akun',
-                      style: TextStyle(color: Colors.blueGrey, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right_rounded, color: Colors.blueGrey),
-            ],
-          ),
+        bottomNavigationBar: AppBottomNav(
+          isKader: false,
+          selectedIndex: 0,
+          onTap: (index) => _onNavigationTap(context, index),
         ),
       ),
     );
