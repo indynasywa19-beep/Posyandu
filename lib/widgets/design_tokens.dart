@@ -1,24 +1,59 @@
 import 'package:flutter/material.dart';
 
 abstract final class AppColors {
-  static const parent = Color(0xFF15803D);
-  static const parentSoft = Color(0xFFECFDF3);
-  static const parentMid = Color(0xFFD1FAE5);
+  // =========================================================
+  // ORANG TUA
+  // Konsep: Biru + Lavender Soft + Putih + Navy
+  // =========================================================
+
+  // Biru utama
+  static const parent = Color(0xFF1261A0);
+
+  // Lavender muda untuk background/area soft
+  static const parentSoft = Color(0xFFF4F1FA);
+
+  // Lavender soft untuk aksen/card
+  static const parentMid = Color(0xFFA99BCF);
+
+  // =========================================================
+  // KADER
+  // Tetap menggunakan konsep biru
+  // =========================================================
   static const kader = Color(0xFF1D4ED8);
   static const kaderSoft = Color(0xFFEFF6FF);
   static const kaderMid = Color(0xFFDBEAFE);
-  static const text = Color(0xFF0F172A);
-  static const secondaryText = Color(0xFF475569);
-  static const divider = Color(0xFFCBD5E1);
+
+  // =========================================================
+  // TEXT
+  // =========================================================
+
+  // Navy untuk judul utama
+  static const text = Color(0xFF123B5D);
+
+  // Abu kebiruan untuk teks sekunder
+  static const secondaryText = Color(0xFF64748B);
+
+  // Border/divider
+  static const divider = Color(0xFFE2E8F0);
+
+  // =========================================================
+  // LOGOUT
+  // =========================================================
+
   static const logoutBackground = Color(0xFFFFE4E6);
   static const logoutForeground = Color(0xFFBE123C);
 
+  // =========================================================
+  // MENU BUBBLES
+  // =========================================================
+  // Tidak menggunakan hijau lagi.
+  // Semua dibuat dalam kombinasi biru + lavender + soft neutral.
   static const menuBubbles = <(Color, Color)>[
-    (Color(0xFFDBEAFE), Color(0xFF1D4ED8)),
-    (Color(0xFFFEF3C7), Color(0xFFB45309)),
-    (Color(0xFFFFE4D6), Color(0xFFC2410C)),
-    (Color(0xFFEDE9FE), Color(0xFF6D28D9)),
-    (Color(0xFFD1FAE5), Color(0xFF047857)),
-    (Color(0xFFFCE7F3), Color(0xFFBE185D)),
+    (Color(0xFFEAF3FA), Color(0xFF1261A0)),
+    (Color(0xFFF4F1FA), Color(0xFFA99BCF)),
+    (Color(0xFFE8EEF5), Color(0xFF123B5D)),
+    (Color(0xFFF0EDF8), Color(0xFF8B7BB8)),
+    (Color(0xFFEAF3FA), Color(0xFF1261A0)),
+    (Color(0xFFF4F1FA), Color(0xFF7D6DA8)),
   ];
 }

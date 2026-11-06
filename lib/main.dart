@@ -6,6 +6,7 @@ import 'widgets/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
   await Supabase.initialize(
     url: 'https://qbkddqhxatkfpxqrzzri.supabase.co',
     publishableKey: 'sb_publishable_oBV6wIFcCH6rJZ3Aa_VgSg_Y-lkjiMC',
