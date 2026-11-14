@@ -3,130 +3,220 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'design_tokens.dart';
 
+/// Gaya teks bernama. Satu keluarga font (Nunito) untuk seluruh aplikasi.
+/// Ukuran terkecil 12 sp.
+abstract final class AppText {
+  static TextStyle _n(double size, FontWeight w, {double? height, Color? color}) =>
+      GoogleFonts.nunito(
+        fontSize: size,
+        fontWeight: w,
+        height: height,
+        color: color ?? AppColors.text,
+      );
+
+  static TextStyle get headline => _n(24, FontWeight.w800, height: 1.25);
+  static TextStyle get title => _n(20, FontWeight.w800, height: 1.3);
+  static TextStyle get subtitle => _n(16, FontWeight.w700, height: 1.35);
+  static TextStyle get body => _n(14, FontWeight.w500, height: 1.5);
+  static TextStyle get bodyLarge => _n(16, FontWeight.w500, height: 1.5);
+  static TextStyle get label => _n(14, FontWeight.w800, height: 1.3);
+  static TextStyle get caption =>
+      _n(12, FontWeight.w600, height: 1.4, color: AppColors.secondaryText);
+}
+
 abstract final class AppTheme {
-  static ThemeData get parent =>
-      _build(const Color(0xFF1261A0), const Color(0xFFF4F1FA));
+  static ThemeData get parent => _build(RolePalette.parent);
 
-  static ThemeData get kader => _build(AppColors.kader, AppColors.kaderSoft);
+  static ThemeData get kader => _build(RolePalette.kader);
 
-  static ThemeData _build(Color primary, Color soft) {
+  static ThemeData forRole({required bool isKader}) => isKader ? kader : parent;
+
+  static ThemeData _build(RolePalette role) {
+    final scheme = ColorScheme.fromSeed(
+      seedColor: role.primary,
+      brightness: Brightness.light,
+    ).copyWith(
+      primary: role.primary,
+      onPrimary: role.onPrimary,
+      primaryContainer: role.tint,
+      onPrimaryContainer: AppColors.text,
+      surface: AppColors.surface,
+      onSurface: AppColors.text,
+      onSurfaceVariant: AppColors.secondaryText,
+      outline: AppColors.divider,
+      outlineVariant: AppColors.divider,
+      error: AppStatus.danger.foreground,
+      onError: Colors.white,
+      errorContainer: AppStatus.danger.background,
+      onErrorContainer: AppStatus.danger.foreground,
+    );
+
     final base = ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: primary,
-        brightness: Brightness.light,
-        surface: Colors.white,
-      ),
-      scaffoldBackgroundColor: const Color(0xFFF4F1FA),
+      colorScheme: scheme,
+      scaffoldBackgroundColor: role.background,
+      materialTapTargetSize: MaterialTapTargetSize.padded,
     );
 
-    final body = GoogleFonts.nunitoTextTheme(base.textTheme).apply(
-      bodyColor: const Color(0xFF123B5D),
-      displayColor: const Color(0xFF123B5D),
+    final textTheme = GoogleFonts.nunitoTextTheme(base.textTheme)
+        .apply(bodyColor: AppColors.text, displayColor: AppColors.text)
+        .copyWith(
+          headlineSmall: AppText.headline,
+          titleLarge: AppText.title,
+          titleMedium: AppText.subtitle,
+          titleSmall: AppText.label,
+          bodyLarge: AppText.bodyLarge,
+          bodyMedium: AppText.body,
+          bodySmall: AppText.caption,
+          labelLarge: AppText.label,
+          labelMedium: AppText.caption.copyWith(fontWeight: FontWeight.w700),
+          labelSmall: AppText.caption,
+        );
+
+    final controlShape = RoundedRectangleBorder(
+      borderRadius: AppRadius.controlAll,
     );
+
+    OutlineInputBorder border(Color color, [double width = 1]) =>
+        OutlineInputBorder(
+          borderRadius: AppRadius.controlAll,
+          borderSide: BorderSide(color: color, width: width),
+        );
 
     return base.copyWith(
-      textTheme: GoogleFonts.fredokaTextTheme(body).copyWith(
-        bodyLarge: body.bodyLarge,
-        bodyMedium: body.bodyMedium,
-        bodySmall: body.bodySmall,
-        labelLarge: body.labelLarge,
-        labelMedium: body.labelMedium,
-        labelSmall: body.labelSmall,
-      ),
+      textTheme: textTheme,
 
-      // APP BAR
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xFFF4F1FA),
-        foregroundColor: Color(0xFF123B5D),
+      appBarTheme: AppBarTheme(
+        backgroundColor: role.background,
+        foregroundColor: AppColors.text,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
         centerTitle: false,
+        titleTextStyle: AppText.title,
       ),
 
-      // INPUT
+      cardTheme: CardThemeData(
+        color: AppColors.surface,
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppRadius.cardAll,
+          side: const BorderSide(color: AppColors.divider),
+        ),
+      ),
+
+      dividerTheme: const DividerThemeData(
+        color: AppColors.divider,
+        thickness: 1,
+        space: 1,
+      ),
+
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: const Color(0xFFF4F1FA),
+        fillColor: AppColors.surface,
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
+          horizontal: AppSpace.lg,
           vertical: 14,
         ),
-
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        hintStyle: AppText.body.copyWith(color: AppColors.mutedText),
+        labelStyle: AppText.body.copyWith(color: AppColors.secondaryText),
+        helperStyle: AppText.caption,
+        errorStyle: AppText.caption.copyWith(
+          color: AppStatus.danger.foreground,
+          fontWeight: FontWeight.w700,
         ),
-
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-        ),
-
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFF1261A0), width: 1.5),
-        ),
+        border: border(AppColors.divider),
+        enabledBorder: border(AppColors.divider),
+        focusedBorder: border(role.primary, 2),
+        errorBorder: border(AppStatus.danger.foreground),
+        focusedErrorBorder: border(AppStatus.danger.foreground, 2),
+        disabledBorder: border(AppColors.divider),
       ),
 
-      // BUTTON
+      // Lebar penuh sebagai bawaan (perilaku lama dipertahankan).
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: const Color(0xFF1261A0),
-          foregroundColor: Colors.white,
-
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-
-          minimumSize: const Size(double.infinity, 48),
-
-          textStyle: GoogleFonts.nunito(
-            fontWeight: FontWeight.w800,
-            fontSize: 14,
-          ),
+          backgroundColor: role.primary,
+          foregroundColor: role.onPrimary,
+          disabledBackgroundColor: AppColors.divider,
+          disabledForegroundColor: AppColors.mutedText,
+          shape: controlShape,
+          minimumSize: const Size(double.infinity, AppSize.touch),
+          textStyle: AppText.label,
         ),
       ),
 
-      // OUTLINED BUTTON
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: const Color(0xFF1261A0),
-
-          side: const BorderSide(color: Color(0xFF1261A0)),
-
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-
-          textStyle: GoogleFonts.nunito(fontWeight: FontWeight.w800),
+          foregroundColor: role.primary,
+          side: BorderSide(color: role.primary),
+          shape: controlShape,
+          minimumSize: const Size(64, AppSize.touch),
+          textStyle: AppText.label,
         ),
       ),
 
-      // TEXT BUTTON
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: const Color(0xFF1261A0),
-
-          textStyle: GoogleFonts.nunito(fontWeight: FontWeight.w800),
+          foregroundColor: role.primary,
+          minimumSize: const Size(64, AppSize.touch),
+          textStyle: AppText.label,
         ),
       ),
 
-      // PROGRESS INDICATOR
-      progressIndicatorTheme: const ProgressIndicatorThemeData(
-        color: Color(0xFF1261A0),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          minimumSize: const Size(AppSize.touch, AppSize.touch),
+        ),
       ),
 
-      // SNACKBAR
+      chipTheme: ChipThemeData(
+        backgroundColor: role.tint,
+        selectedColor: role.primary,
+        labelStyle: AppText.caption.copyWith(
+          color: role.primary,
+          fontWeight: FontWeight.w800,
+        ),
+        secondaryLabelStyle: AppText.caption.copyWith(
+          color: role.onPrimary,
+          fontWeight: FontWeight.w800,
+        ),
+        side: BorderSide.none,
+        shape: const StadiumBorder(),
+      ),
+
+      dialogTheme: DialogThemeData(
+        backgroundColor: AppColors.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.cardAll),
+        titleTextStyle: AppText.title,
+        contentTextStyle: AppText.body,
+      ),
+
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: AppColors.surface,
+        surfaceTintColor: Colors.transparent,
+        showDragHandle: true,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppRadius.card),
+          ),
+        ),
+      ),
+
+      progressIndicatorTheme: ProgressIndicatorThemeData(color: role.primary),
+
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: const Color(0xFF123B5D),
-        contentTextStyle: GoogleFonts.nunito(
+        backgroundColor: AppColors.text,
+        contentTextStyle: AppText.body.copyWith(
           color: Colors.white,
           fontWeight: FontWeight.w600,
         ),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: controlShape,
       ),
     );
   }

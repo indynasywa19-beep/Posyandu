@@ -1,32 +1,46 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show listEquals;
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart' show listEquals;
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/anak.dart';
 import '../models/pemeriksaan.dart';
+import '../utils/app_copy.dart';
+import '../widgets/app_components.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/app_widgets.dart';
+import '../widgets/child_picker.dart';
 import '../widgets/design_tokens.dart';
+import '../widgets/kader_widgets.dart';
 import 'artikel_page.dart';
 import 'data_anak_page.dart';
+import 'home_kader_page.dart';
 import 'home_ortu_page.dart';
 import 'jadwal_page.dart';
+import 'pemeriksaan_page.dart' hide Pemeriksaan;
 import 'profil_page.dart';
 
 class PerkembanganPage extends StatefulWidget {
-  const PerkembanganPage({super.key});
+  final bool isKader;
+  final Object? anakId;
+
+  const PerkembanganPage({super.key, this.isKader = false, this.anakId});
 
   @override
   State<PerkembanganPage> createState() => _PerkembanganPageState();
 }
 
 class _PerkembanganPageState extends State<PerkembanganPage> {
+  static const _metricWeight = 'Berat badan';
+  static const _metricHeight = 'Tinggi badan';
+  static const _metricKms = 'KMS';
+
   List<Anak> dataAnak = [];
   List<Pemeriksaan> dataPemeriksaan = [];
 
   Object? selectedAnakId;
-  String selectedMetric = 'BB/U';
+  String selectedMetric = _metricWeight;
 
   bool isLoading = true;
   String? loadError;
@@ -37,11 +51,14 @@ class _PerkembanganPageState extends State<PerkembanganPage> {
     loadData();
   }
 
+  // ---------------------------------------------------------------------------
+  // DATA
+  // ---------------------------------------------------------------------------
   Future<void> loadData() async {
     final supabase = Supabase.instance.client;
     final user = supabase.auth.currentUser;
 
-    if (user == null) {
+    if (!widget.isKader && user == null) {
       if (!mounted) return;
 
       setState(() {
@@ -57,11 +74,17 @@ class _PerkembanganPageState extends State<PerkembanganPage> {
     });
 
     try {
-      final childrenRows = await supabase
-          .from('anak')
-          .select()
-          .eq('user_id', user.id)
-          .order('nama');
+      final List<Map<String, dynamic>> childrenRows;
+
+      if (widget.isKader) {
+        childrenRows = await supabase.from('anak').select().order('nama');
+      } else {
+        childrenRows = await supabase
+            .from('anak')
+            .select()
+            .eq('user_id', user!.id)
+            .order('nama');
+      }
 
       final childList = childrenRows.map((row) => Anak.fromMap(row)).toList();
 
@@ -103,7 +126,16 @@ class _PerkembanganPageState extends State<PerkembanganPage> {
         dataAnak = childList;
         dataPemeriksaan = examinations;
 
-        if (selectedAnakId == null ||
+        if (widget.anakId != null &&
+            childList.any(
+              (child) => child.id.toString() == widget.anakId.toString(),
+            )) {
+          selectedAnakId = childList
+              .firstWhere(
+                (child) => child.id.toString() == widget.anakId.toString(),
+              )
+              .id;
+        } else if (selectedAnakId == null ||
             !childList.any((child) => child.id == selectedAnakId)) {
           selectedAnakId = childList.isEmpty ? null : childList.first.id;
         }
@@ -114,7 +146,10 @@ class _PerkembanganPageState extends State<PerkembanganPage> {
       if (!mounted) return;
 
       setState(() {
-        loadError = 'Gagal memuat data perkembangan: $error';
+        loadError = friendlyError(
+          error,
+          fallback: 'Data perkembangan belum bisa dimuat. Coba lagi sebentar lagi.',
+        );
         isLoading = false;
       });
     }
@@ -138,6 +173,7 @@ class _PerkembanganPageState extends State<PerkembanganPage> {
 
   Pemeriksaan? get pemeriksaanTerakhir {
     final riwayat = pemeriksaanAnak;
+
     return riwayat.isEmpty ? null : riwayat.last;
   }
 
@@ -179,31 +215,35 @@ class _PerkembanganPageState extends State<PerkembanganPage> {
     return 'Tidak berubah';
   }
 
+  /// Ikon arah perubahan. Sengaja netral (tidak hijau/merah): naik atau turun
+  /// tidak otomatis berarti baik atau buruk.
+  IconData _arahPerubahan(double? nilai) {
+    if (nilai == null) return Icons.horizontal_rule_rounded;
+    if (nilai > 0) return Icons.trending_up_rounded;
+    if (nilai < 0) return Icons.trending_down_rounded;
+    return Icons.trending_flat_rounded;
+  }
+
+  /// Contoh: "9 Nov 2026".
   String formatTanggal(String tanggal) {
     final date = DateTime.tryParse(tanggal);
 
     if (date == null) return tanggal;
 
-    const bulan = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'Mei',
-      'Jun',
-      'Jul',
-      'Agu',
-      'Sep',
-      'Okt',
-      'Nov',
-      'Des',
-    ];
-
-    return '${date.day} ${bulan[date.month - 1]} ${date.year}';
+    return '${date.day} ${bulanSingkat(date.month)} ${date.year}';
   }
 
-  void _onNavigationTap(BuildContext context, int index) {
-    final page = switch (index) {
+  String _tanggalLengkap(String tanggal) {
+    final date = DateTime.tryParse(tanggal);
+
+    return date == null ? tanggal : tanggalLengkap(date);
+  }
+
+  // ---------------------------------------------------------------------------
+  // NAVIGASI
+  // ---------------------------------------------------------------------------
+  void _onParentNavigationTap(BuildContext context, int index) {
+    final Widget? page = switch (index) {
       0 => const HomeOrtuPage(),
       1 => const DataAnakPage(),
       2 => const JadwalPage(),
@@ -217,410 +257,401 @@ class _PerkembanganPageState extends State<PerkembanganPage> {
     }
   }
 
+  void _onKaderNavigationTap(BuildContext context, int index) {
+    final Widget? page = switch (index) {
+      0 => const HomeKaderPage(),
+      1 => const DataAnakPage(isKader: true),
+      2 => const JadwalPage(isKader: true),
+      3 => const ProfilPage(),
+      _ => null,
+    };
+
+    if (page != null) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => page),
+      );
+    }
+  }
+
+  Future<void> _pickChild() async {
+    final id = await showChildPicker(
+      context,
+      children: dataAnak
+          .map((a) => {'id': a.id, 'nama': a.nama, 'nik': a.nik})
+          .toList(),
+      selectedId: selectedAnakId?.toString(),
+    );
+
+    if (id == null || !mounted) return;
+
+    for (final a in dataAnak) {
+      if (a.id.toString() == id) {
+        setState(() => selectedAnakId = a.id);
+        break;
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // BUILD
+  // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
-    final anak = anakTerpilih;
-    final riwayat = pemeriksaanAnak;
-    final terbaru = pemeriksaanTerakhir;
-
-    final nilaiGrafik = riwayat.map((record) {
-      return selectedMetric == 'BB/U' ? record.beratBadan : record.tinggiBadan;
-    }).toList();
+    final isKader = widget.isKader;
 
     return Theme(
-      data: AppTheme.parent,
+      data: isKader ? AppTheme.kader : AppTheme.parent,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF8FAF8),
         appBar: AppBar(
-          title: const Text('Grafik Tumbuh'),
+          title: Text(
+            isKader ? 'Detail & Monitoring Anak' : 'Detail & Grafik Anak',
+          ),
           actions: [
             IconButton(
               tooltip: 'Muat ulang data',
               onPressed: isLoading ? null : loadData,
-              icon: const Icon(Icons.refresh),
+              icon: const Icon(Icons.refresh_rounded),
             ),
           ],
         ),
-        body: _buildBody(
-          anak: anak,
-          riwayat: riwayat,
-          terbaru: terbaru,
-          nilaiGrafik: nilaiGrafik,
-        ),
-        bottomNavigationBar: AppBottomNav(
-          isKader: false,
-          selectedIndex: 0,
-          onTap: (index) => _onNavigationTap(context, index),
-        ),
+        body: _buildBody(),
+        floatingActionButtonLocation: isKader
+            ? FloatingActionButtonLocation.centerDocked
+            : null,
+        floatingActionButton: isKader
+            ? KaderCenterFab(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const PemeriksaanPage(openFormOnStart: true),
+                  ),
+                ),
+              )
+            : null,
+        bottomNavigationBar: isKader
+            ? KaderBottomAppBar(
+                selectedIndex: 1,
+                onTabSelected: (index) => _onKaderNavigationTap(context, index),
+              )
+            : AppBottomNav(
+                isKader: false,
+                selectedIndex: 1,
+                onTap: (index) => _onParentNavigationTap(context, index),
+              ),
       ),
     );
   }
 
-  Widget _buildBody({
-    required Anak? anak,
-    required List<Pemeriksaan> riwayat,
-    required Pemeriksaan? terbaru,
-    required List<double> nilaiGrafik,
-  }) {
+  Widget _buildBody() {
     if (isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const LoadingState(message: 'Memuat data perkembangan');
     }
 
     if (loadError != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.cloud_off, size: 48, color: Colors.grey),
-              const SizedBox(height: 12),
-              Text(loadError!, textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              ElevatedButton(
-                onPressed: loadData,
-                child: const Text('Coba Lagi'),
-              ),
-            ],
-          ),
-        ),
+      return ErrorState(
+        title: 'Data perkembangan belum bisa dimuat',
+        message: loadError!,
+        onRetry: loadData,
       );
     }
 
     if (dataAnak.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Text(
-            'Belum ada data anak. Tambahkan data anak terlebih dahulu.',
-            textAlign: TextAlign.center,
-          ),
-        ),
+      return const EmptyState(
+        icon: Icons.child_care_rounded,
+        title: 'Belum ada data anak',
+        message: 'Tambahkan data anak terlebih dahulu di menu Anak.',
       );
     }
+
+    final anak = anakTerpilih;
+    final riwayat = pemeriksaanAnak;
+    final riwayatTerbaru = riwayat.reversed.toList();
+    final terbaru = pemeriksaanTerakhir;
 
     return RefreshIndicator(
       onRefresh: loadData,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpace.page,
+          AppSpace.sm,
+          AppSpace.page,
+          AppSpace.xl + AppSpace.lg,
+        ),
         children: [
-          const Text(
-            'Perkembangan Anak',
-            style: TextStyle(fontSize: 25, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Pantau perubahan pertumbuhan si kecil dari waktu ke waktu.',
-            style: TextStyle(color: Colors.grey),
-          ),
-          const SizedBox(height: 20),
-
-          // PILIH ANAK
-          DropdownButtonFormField<Object>(
-            initialValue: selectedAnakId,
-            isExpanded: true,
-            decoration: InputDecoration(
-              labelText: 'Pilih Anak',
-              prefixIcon: const Icon(Icons.child_care, color: Colors.green),
-              filled: true,
-              fillColor: Colors.white,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide.none,
-              ),
+          // Pilih anak (hanya bila ada lebih dari satu)
+          if (dataAnak.length > 1 && anak != null) ...[
+            Text('Anak', style: AppText.label),
+            const SizedBox(height: 6),
+            KaderChildSelectorTile(
+              childName: anak.nama,
+              subtitle: 'NIK: ${anak.nik.isEmpty ? '-' : anak.nik}',
+              onSelectChild: _pickChild,
             ),
-            items: dataAnak.map((item) {
-              return DropdownMenuItem<Object>(
-                value: item.id!,
-                child: Text(item.nama),
-              );
-            }).toList(),
-            onChanged: (value) {
-              setState(() {
-                selectedAnakId = value;
-              });
-            },
+            const SizedBox(height: AppSpace.lg),
+          ],
+
+          if (anak != null) _buildIdentityCard(anak, riwayat.length),
+          const SizedBox(height: AppSpace.xl),
+
+          // RINGKASAN
+          SectionHeader(
+            title: 'Ringkasan pertumbuhan',
+            subtitle: terbaru == null
+                ? 'Belum ada data pengukuran.'
+                : 'Pemeriksaan terakhir: ${_tanggalLengkap(terbaru.tanggal)}',
           ),
-
-          const SizedBox(height: 18),
-
-          if (anak != null)
-            HeroCard(
-              color: AppColors.parent,
+          const SizedBox(height: AppSpace.md),
+          if (terbaru == null)
+            const _InfoPanel(
+              icon: Icons.monitor_weight_outlined,
+              title: 'Belum ada hasil pemeriksaan',
+              message:
+                  'Hasil pengukuran akan tampil setelah kader menyimpan pemeriksaan.',
+            )
+          else ...[
+            IntrinsicHeight(
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const ChildAvatar(size: 52),
-                  const SizedBox(width: 14),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          anak.nama,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 19,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          '${anak.jenisKelamin} • ${anak.tanggalLahir}',
-                          style: const TextStyle(color: Colors.white70),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '${riwayat.length} pemeriksaan tercatat',
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                      ],
+                    child: _SummaryCard(
+                      icon: Icons.monitor_weight_outlined,
+                      title: 'Berat badan',
+                      value: '${terbaru.beratBadan.toStringAsFixed(1)} kg',
+                      changeIcon: _arahPerubahan(perubahanBerat),
+                      changeText: formatPerubahan(perubahanBerat, 'kg'),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpace.md),
+                  Expanded(
+                    child: _SummaryCard(
+                      icon: Icons.height_rounded,
+                      title: 'Tinggi badan',
+                      value: '${terbaru.tinggiBadan.toStringAsFixed(1)} cm',
+                      changeIcon: _arahPerubahan(perubahanTinggi),
+                      changeText: formatPerubahan(perubahanTinggi, 'cm'),
                     ),
                   ),
                 ],
               ),
             ),
-
-          const SizedBox(height: 22),
-
-          // RINGKASAN PEMERIKSAAN
-          const Text(
-            'Ringkasan Pertumbuhan',
-            style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            terbaru == null
-                ? 'Belum ada data pengukuran.'
-                : 'Pemeriksaan terakhir: ${formatTanggal(terbaru.tanggal)}',
-            style: const TextStyle(color: Colors.grey),
-          ),
-          const SizedBox(height: 14),
-
-          if (terbaru == null)
-            _emptyCard(
-              Icons.monitor_weight_outlined,
-              'Belum ada hasil pemeriksaan',
-              'Hasil pengukuran akan tampil setelah kader menyimpan pemeriksaan.',
-            )
-          else ...[
-            Row(
-              children: [
-                Expanded(
-                  child: _statCard(
-                    icon: Icons.monitor_weight_outlined,
-                    title: 'Berat Badan',
-                    value: '${terbaru.beratBadan.toStringAsFixed(1)} kg',
-                    color: Colors.green,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _statCard(
-                    icon: Icons.height,
-                    title: 'Tinggi Badan',
-                    value: '${terbaru.tinggiBadan.toStringAsFixed(1)} cm',
-                    color: Colors.blue,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _trendCard(
-                    title: 'Perubahan Berat',
-                    value: formatPerubahan(perubahanBerat, 'kg'),
-                    icon: Icons.monitor_weight_outlined,
-                    color: Colors.green,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _trendCard(
-                    title: 'Perubahan Tinggi',
-                    value: formatPerubahan(perubahanTinggi, 'cm'),
-                    icon: Icons.height,
-                    color: Colors.blue,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const Text(
+            const SizedBox(height: AppSpace.sm),
+            Text(
               'Perubahan dihitung dari dua pemeriksaan terakhir. '
               'Kenaikan atau penurunan angka tidak otomatis menentukan '
               'status gizi anak.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+              style: AppText.caption,
             ),
           ],
-
-          const SizedBox(height: 26),
+          const SizedBox(height: AppSpace.xl),
 
           // GRAFIK
-          const Text(
-            'Grafik Pertumbuhan',
-            style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
+          const SectionHeader(
+            title: 'Grafik pertumbuhan',
+            subtitle:
+                'Lihat perubahan hasil pengukuran berdasarkan riwayat pemeriksaan.',
           ),
-          const SizedBox(height: 6),
-          const Text(
-            'Lihat perubahan hasil pengukuran berdasarkan riwayat pemeriksaan.',
-            style: TextStyle(color: Colors.grey),
-          ),
-          const SizedBox(height: 14),
-
-          ChipSelector(
-            options: const ['BB/U', 'TB/U', 'KMS'],
+          const SizedBox(height: AppSpace.md),
+          ChoiceChipGroup(
+            options: const [_metricWeight, _metricHeight, _metricKms],
             selected: selectedMetric,
-            roleColor: AppColors.parent,
-            softColor: AppColors.parentSoft,
-            onSelected: (value) {
-              setState(() {
-                selectedMetric = value;
-              });
+            onChanged: (value) {
+              // Selalu ada satu pilihan: mengetuk yang sedang terpilih
+              // tidak membatalkannya.
+              if (value.isNotEmpty) setState(() => selectedMetric = value);
             },
           ),
-          const SizedBox(height: 14),
-
-          if (selectedMetric == 'KMS')
-            _emptyCard(
-              Icons.menu_book_outlined,
-              'Data KMS belum tersedia',
-              'Standar KMS belum terhubung dengan data pertumbuhan aplikasi.',
+          const SizedBox(height: AppSpace.md),
+          if (selectedMetric == _metricKms)
+            const _InfoPanel(
+              icon: Icons.menu_book_outlined,
+              title: 'Data KMS belum tersedia',
+              message:
+                  'Standar KMS belum terhubung dengan data pertumbuhan aplikasi.',
             )
           else if (riwayat.isEmpty)
-            _emptyCard(
-              Icons.show_chart,
-              'Belum ada grafik',
-              'Grafik akan tampil setelah ada hasil pemeriksaan yang tersimpan.',
+            const _InfoPanel(
+              icon: Icons.show_chart_rounded,
+              title: 'Belum ada grafik',
+              message:
+                  'Grafik akan tampil setelah ada hasil pemeriksaan yang tersimpan.',
             )
           else
-            _buildChart(riwayat, nilaiGrafik),
-
-          const SizedBox(height: 12),
-
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.parentSoft,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.info_outline, color: AppColors.parent),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Grafik ini menampilkan riwayat pengukuran anak, '
-                    'bukan kurva standar pertumbuhan WHO. '
-                    'Penilaian status pertumbuhan memerlukan standar '
-                    'yang sesuai usia dan jenis kelamin.',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
+            _buildChart(riwayat),
+          const SizedBox(height: AppSpace.md),
+          const InlineMessage(
+            status: AppStatus.info,
+            message:
+                'Grafik ini menampilkan riwayat pengukuran anak, '
+                'bukan kurva standar pertumbuhan WHO. '
+                'Penilaian status pertumbuhan memerlukan standar '
+                'yang sesuai usia dan jenis kelamin.',
           ),
-
-          const SizedBox(height: 26),
+          const SizedBox(height: AppSpace.xl),
 
           // RIWAYAT
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Riwayat Pertumbuhan',
-                  style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
-                ),
-              ),
-              Text(
-                '${riwayat.length} data',
-                style: const TextStyle(color: Colors.grey),
-              ),
-            ],
+          SectionHeader(
+            title: 'Riwayat pertumbuhan',
+            subtitle: '${riwayat.length} data',
           ),
-          const SizedBox(height: 12),
-
+          const SizedBox(height: AppSpace.md),
           if (riwayat.isEmpty)
-            _emptyCard(
-              Icons.history,
-              'Belum ada riwayat',
-              'Riwayat akan muncul setelah pemeriksaan disimpan.',
+            const _InfoPanel(
+              icon: Icons.history_rounded,
+              title: 'Belum ada riwayat',
+              message: 'Riwayat akan muncul setelah pemeriksaan disimpan.',
             )
           else
-            ...riwayat.reversed.map((pemeriksaan) {
-              return _historyCard(pemeriksaan);
-            }),
-
-          const SizedBox(height: 24),
+            for (var i = 0; i < riwayatTerbaru.length; i++) ...[
+              if (i > 0) const SizedBox(height: AppSpace.md),
+              _HistoryCard(
+                dateText: _tanggalLengkap(riwayatTerbaru[i].tanggal),
+                weight: '${riwayatTerbaru[i].beratBadan.toStringAsFixed(1)} kg',
+                height: '${riwayatTerbaru[i].tinggiBadan.toStringAsFixed(1)} cm',
+                note: riwayatTerbaru[i].catatan.trim(),
+              ),
+            ],
         ],
       ),
     );
   }
 
-  Widget _buildChart(List<Pemeriksaan> riwayat, List<double> values) {
-    final satuan = selectedMetric == 'BB/U' ? 'kg' : 'cm';
-    final judul = selectedMetric == 'BB/U' ? 'Berat Badan' : 'Tinggi Badan';
+  // ---------------------------------------------------------------------------
+  // IDENTITAS (satu kartu, tidak lagi tiga kali)
+  // ---------------------------------------------------------------------------
+  Widget _buildIdentityCard(Anak anak, int jumlahPemeriksaan) {
+    final gender = anak.jenisKelamin.trim().isEmpty ? '-' : anak.jenisKelamin;
+    final birth = anak.tanggalLahir.trim().isEmpty
+        ? '-'
+        : _tanggalLengkap(anak.tanggalLahir);
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            judul,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          Row(
+            children: [
+              InitialsAvatar(name: anak.nama, size: 52),
+              const SizedBox(width: AppSpace.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(anak.nama, style: AppText.title),
+                    const SizedBox(height: 2),
+                    Text('$gender · Lahir $birth', style: AppText.caption),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpace.md),
+          const Divider(),
+          const SizedBox(height: AppSpace.md),
+          _IdentityLine(
+            icon: Icons.badge_outlined,
+            label: 'NIK',
+            value: anak.nik,
+          ),
+          const SizedBox(height: AppSpace.sm),
+          _IdentityLine(
+            icon: Icons.fact_check_outlined,
+            label: 'Pemeriksaan',
+            value: '$jumlahPemeriksaan tercatat',
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // GRAFIK
+  // ---------------------------------------------------------------------------
+  Widget _buildChart(List<Pemeriksaan> riwayat) {
+    // Builder: agar Theme.of membaca tema peran (Kader/Orang Tua) di atas
+    // Scaffold, bukan tema aplikasi di atas State ini.
+    return Builder(builder: (context) => _chartCard(context, riwayat));
+  }
+
+  Widget _chartCard(BuildContext context, List<Pemeriksaan> riwayat) {
+    final isWeight = selectedMetric == _metricWeight;
+    final satuan = isWeight ? 'kg' : 'cm';
+    final judul = isWeight ? 'Berat badan' : 'Tinggi badan';
+
+    final values = riwayat
+        .map((record) => isWeight ? record.beratBadan : record.tinggiBadan)
+        .toList();
+    final dates = riwayat.map((r) => DateTime.tryParse(r.tanggal)).toList();
+
+    final lowest = values.reduce(math.min);
+    final highest = values.reduce(math.max);
+    final lastText = '${values.last.toStringAsFixed(1)} $satuan';
+
+    final summary =
+        'Grafik $judul. ${values.length} pengukuran. '
+        'Terendah ${lowest.toStringAsFixed(1)} $satuan, '
+        'tertinggi ${highest.toStringAsFixed(1)} $satuan. '
+        'Terakhir $lastText pada ${_tanggalLengkap(riwayat.last.tanggal)}.';
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(judul, style: AppText.subtitle),
+          const SizedBox(height: 2),
           Text(
             'Satuan: $satuan • ${values.length} pengukuran',
-            style: const TextStyle(color: Colors.grey, fontSize: 12),
+            style: AppText.caption,
           ),
-          const SizedBox(height: 18),
-          SizedBox(
-            height: 190,
-            width: double.infinity,
-            child: CustomPaint(
-              painter: _GrowthChartPainter(
-                values: values,
-                lineColor: AppColors.parent,
+          const SizedBox(height: AppSpace.lg),
+          Semantics(
+            label: summary,
+            image: true,
+            child: ExcludeSemantics(
+              child: SizedBox(
+                height: 210,
+                width: double.infinity,
+                child: CustomPaint(
+                  painter: _GrowthChartPainter(
+                    values: values,
+                    dates: dates,
+                    lineColor: Theme.of(context).colorScheme.primary,
+                    gridColor: AppColors.divider,
+                    labelStyle: AppText.caption,
+                    firstLabel: formatTanggal(riwayat.first.tanggal),
+                    lastLabel: formatTanggal(riwayat.last.tanggal),
+                  ),
+                ),
               ),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpace.md),
           if (riwayat.length >= 2)
             Text(
-              'Terakhir: ${values.last.toStringAsFixed(1)} $satuan '
-              '(${formatTanggal(riwayat.last.tanggal)})',
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              'Terakhir: $lastText (${formatTanggal(riwayat.last.tanggal)})',
+              style: AppText.label,
             )
           else
             Text(
               'Pengukuran pertama: ${values.first.toStringAsFixed(1)} $satuan',
-              style: const TextStyle(fontSize: 13),
+              style: AppText.label,
             ),
-          const SizedBox(height: 10),
-          const Row(
+          const SizedBox(height: AppSpace.sm),
+          Row(
             children: [
-              Icon(Icons.circle, size: 9, color: AppColors.parent),
-              SizedBox(width: 6),
+              Icon(
+                Icons.circle,
+                size: 9,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  'Titik menunjukkan hasil pengukuran yang tercatat.',
-                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                  'Titik menunjukkan hasil pengukuran yang tercatat. '
+                  'Jarak antartitik mengikuti tanggal pemeriksaan.',
+                  style: AppText.caption,
                 ),
               ),
             ],
@@ -629,108 +660,151 @@ class _PerkembanganPageState extends State<PerkembanganPage> {
       ),
     );
   }
+}
 
-  Widget _statCard({
-    required IconData icon,
-    required String title,
-    required String value,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(17),
-      ),
+// =============================================================================
+// KOMPONEN HALAMAN
+// =============================================================================
+class _IdentityLine extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _IdentityLine({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: AppColors.secondaryText),
+        const SizedBox(width: AppSpace.sm),
+        SizedBox(
+          width: 104,
+          child: Text(label, style: AppText.caption),
+        ),
+        Expanded(
+          child: Text(
+            value.isEmpty ? '-' : value,
+            style: AppText.body.copyWith(fontWeight: FontWeight.w700),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SummaryCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String value;
+  final IconData changeIcon;
+  final String changeText;
+
+  const _SummaryCard({
+    required this.icon,
+    required this.title,
+    required this.value,
+    required this.changeIcon,
+    required this.changeText,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: 28),
-          const SizedBox(height: 12),
-          Text(title, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-          const SizedBox(height: 6),
+          Row(
+            children: [
+              Icon(icon, size: 22, color: scheme.primary),
+              const SizedBox(width: 6),
+              Expanded(child: Text(title, style: AppText.caption)),
+            ],
+          ),
+          const SizedBox(height: AppSpace.sm),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
-            ),
+            child: Text(value, style: AppText.title.copyWith(fontSize: 24)),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(changeIcon, size: 18, color: AppColors.secondaryText),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  changeText,
+                  style: AppText.caption.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _trendCard({
-    required String title,
-    required String value,
-    required IconData icon,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.15)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: 22),
-          const SizedBox(height: 9),
-          Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-          const SizedBox(height: 5),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-        ],
+class _InfoPanel extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String message;
+
+  const _InfoPanel({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpace.xl - 2),
+      child: SizedBox(
+        width: double.infinity,
+        child: Column(
+          children: [
+            Icon(icon, size: 36, color: scheme.primary),
+            const SizedBox(height: AppSpace.md),
+            Text(title, style: AppText.subtitle, textAlign: TextAlign.center),
+            const SizedBox(height: 6),
+            Text(message, style: AppText.body, textAlign: TextAlign.center),
+          ],
+        ),
       ),
     );
   }
+}
 
-  Widget _emptyCard(IconData icon, String title, String description) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(17),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, size: 38, color: Colors.grey),
-          const SizedBox(height: 10),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            description,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.grey, fontSize: 12),
-          ),
-        ],
-      ),
-    );
-  }
+class _HistoryCard extends StatelessWidget {
+  final String dateText;
+  final String weight;
+  final String height;
+  final String note;
 
-  Widget _historyCard(Pemeriksaan pemeriksaan) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
+  const _HistoryCard({
+    required this.dateText,
+    required this.weight,
+    required this.height,
+    required this.note,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return AppCard(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -738,31 +812,27 @@ class _PerkembanganPageState extends State<PerkembanganPage> {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: const Color(0xFFE0F2E5),
-              borderRadius: BorderRadius.circular(12),
+              color: scheme.primaryContainer,
+              shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.show_chart, color: Colors.green),
+            child: Icon(Icons.show_chart_rounded, color: scheme.primary),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: AppSpace.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Text(dateText, style: AppText.subtitle),
+                const SizedBox(height: AppSpace.xs),
                 Text(
-                  formatTanggal(pemeriksaan.tanggal),
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  'Berat $weight · Tinggi $height',
+                  style: AppText.body.copyWith(fontWeight: FontWeight.w700),
                 ),
-                const SizedBox(height: 7),
-                Text('Berat: ${pemeriksaan.beratBadan.toStringAsFixed(1)} kg'),
-                const SizedBox(height: 3),
-                Text(
-                  'Tinggi: ${pemeriksaan.tinggiBadan.toStringAsFixed(1)} cm',
-                ),
-                if (pemeriksaan.catatan.trim().isNotEmpty) ...[
-                  const SizedBox(height: 7),
+                if (note.isNotEmpty) ...[
+                  const SizedBox(height: 4),
                   Text(
-                    pemeriksaan.catatan,
-                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    note,
+                    style: AppText.body.copyWith(color: AppColors.secondaryText),
                   ),
                 ],
               ],
@@ -774,20 +844,41 @@ class _PerkembanganPageState extends State<PerkembanganPage> {
   }
 }
 
+// =============================================================================
+// GRAFIK
+// =============================================================================
+/// Menggambar hasil pengukuran terhadap waktu. TIDAK menggambar kurva standar
+/// atau penilaian apa pun.
+///
+/// Posisi titik mengikuti tanggal bila semua tanggal valid dan tidak semuanya
+/// sama. Bila tidak, titik dibagi rata.
 class _GrowthChartPainter extends CustomPainter {
   final List<double> values;
+  final List<DateTime?> dates;
   final Color lineColor;
+  final Color gridColor;
+  final TextStyle labelStyle;
+  final String firstLabel;
+  final String lastLabel;
 
-  const _GrowthChartPainter({required this.values, required this.lineColor});
+  const _GrowthChartPainter({
+    required this.values,
+    required this.dates,
+    required this.lineColor,
+    required this.gridColor,
+    required this.labelStyle,
+    required this.firstLabel,
+    required this.lastLabel,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
     if (values.isEmpty || size.isEmpty) return;
 
-    const left = 35.0;
-    const right = 10.0;
+    const left = 44.0;
+    const right = 12.0;
     const top = 12.0;
-    const bottom = 18.0;
+    const bottom = 26.0;
 
     final chart = Rect.fromLTRB(
       left,
@@ -799,39 +890,55 @@ class _GrowthChartPainter extends CustomPainter {
     final minValue = values.reduce(math.min);
     final maxValue = values.reduce(math.max);
     final range = maxValue - minValue;
-
     final padding = range == 0 ? 1.0 : range * 0.25;
+
     final lower = minValue - padding;
     final upper = maxValue + padding;
     final totalRange = upper - lower;
 
     final gridPaint = Paint()
-      ..color = const Color(0xFFE5E7EB)
+      ..color = gridColor
       ..strokeWidth = 1;
 
-    final textStyle = const TextStyle(color: Colors.grey, fontSize: 10);
-
+    // Garis bantu dan angka sumbu tegak
     for (var row = 0; row <= 3; row++) {
       final y = chart.top + chart.height * row / 3;
 
       canvas.drawLine(Offset(chart.left, y), Offset(chart.right, y), gridPaint);
 
       final value = upper - totalRange * row / 3;
-      final text = TextPainter(
-        text: TextSpan(text: value.toStringAsFixed(1), style: textStyle),
-        textDirection: TextDirection.ltr,
-      )..layout(maxWidth: left - 5);
 
-      text.paint(canvas, Offset(0, y - text.height / 2));
+      final text = TextPainter(
+        text: TextSpan(text: value.toStringAsFixed(1), style: labelStyle),
+        textDirection: TextDirection.ltr,
+      )..layout(maxWidth: left - 6);
+
+      text.paint(canvas, Offset(left - 6 - text.width, y - text.height / 2));
+    }
+
+    // Posisi mendatar: menurut tanggal bila memungkinkan.
+    final parsed = dates.whereType<DateTime>().toList();
+    final byDate =
+        parsed.length == dates.length &&
+        parsed.length > 1 &&
+        parsed.last.difference(parsed.first).inDays > 0;
+
+    double fraction(int index) {
+      if (values.length == 1) return 0.5;
+
+      if (byDate) {
+        final total = parsed.last.difference(parsed.first).inMilliseconds;
+        final elapsed = parsed[index].difference(parsed.first).inMilliseconds;
+        return elapsed / total;
+      }
+
+      return index / (values.length - 1);
     }
 
     final points = <Offset>[];
 
     for (var index = 0; index < values.length; index++) {
-      final x = values.length == 1
-          ? chart.center.dx
-          : chart.left + chart.width * index / (values.length - 1);
-
+      final x = chart.left + chart.width * fraction(index);
       final y =
           chart.bottom - ((values[index] - lower) / totalRange) * chart.height;
 
@@ -856,18 +963,43 @@ class _GrowthChartPainter extends CustomPainter {
       );
     }
 
-    for (var i = 0; i < points.length; i++) {
-      final point = points[i];
+    for (final point in points) {
+      canvas.drawCircle(point, 5.5, Paint()..color = Colors.white);
+      canvas.drawCircle(point, 4, Paint()..color = lineColor);
+    }
 
-      canvas.drawCircle(point, 5, Paint()..color = Colors.white);
+    // Label tanggal pertama dan terakhir di sumbu mendatar
+    final labelY = chart.bottom + 6;
 
-      canvas.drawCircle(point, 3.5, Paint()..color = lineColor);
+    final first = TextPainter(
+      text: TextSpan(text: firstLabel, style: labelStyle),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    if (values.length == 1) {
+      first.paint(canvas, Offset(chart.center.dx - first.width / 2, labelY));
+    } else {
+      first.paint(canvas, Offset(chart.left, labelY));
+
+      final last = TextPainter(
+        text: TextSpan(text: lastLabel, style: labelStyle),
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+      // Hindari tumpang tindih bila ruangnya sempit.
+      if (chart.left + first.width + 8 < chart.right - last.width) {
+        last.paint(canvas, Offset(chart.right - last.width, labelY));
+      }
     }
   }
 
   @override
   bool shouldRepaint(covariant _GrowthChartPainter oldDelegate) {
     return oldDelegate.lineColor != lineColor ||
-        !listEquals(oldDelegate.values, values);
+        oldDelegate.gridColor != gridColor ||
+        oldDelegate.firstLabel != firstLabel ||
+        oldDelegate.lastLabel != lastLabel ||
+        !listEquals(oldDelegate.values, values) ||
+        !listEquals(oldDelegate.dates, dates);
   }
 }

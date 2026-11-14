@@ -1,5 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../utils/app_copy.dart';
+import '../widgets/app_components.dart';
+import '../widgets/app_dialogs.dart';
+import '../widgets/app_theme.dart';
+import '../widgets/app_widgets.dart';
+import '../widgets/design_tokens.dart';
 import 'artikel_page.dart';
 import 'data_anak_page.dart';
 import 'jadwal_page.dart';
@@ -16,16 +23,6 @@ class HomeOrtuPage extends StatefulWidget {
 }
 
 class _HomeOrtuPageState extends State<HomeOrtuPage> {
-  // =========================================================
-  // WARNA KONSEP TERBARU
-  // =========================================================
-  static const Color primaryBlue = Color(0xFF1261A0);
-  static const Color lavender = Color(0xFFA99BCF);
-  static const Color lavenderLight = Color(0xFFF4F1FA);
-  static const Color navy = Color(0xFF123B5D);
-  static const Color secondaryText = Color(0xFF64748B);
-  static const Color borderColor = Color(0xFFE5E7EB);
-
   late Future<int> _childCount;
 
   RealtimeChannel? _childrenChannel;
@@ -56,11 +53,12 @@ class _HomeOrtuPageState extends State<HomeOrtuPage> {
                 !_realtimeErrorReported &&
                 mounted) {
               _realtimeErrorReported = true;
+              logError(error ?? status, 'realtime anak');
 
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
+                const SnackBar(
                   content: Text(
-                    'Pembaruan data anak gagal: ${error ?? status}',
+                    'Pembaruan otomatis belum aktif. Tarik layar ke bawah untuk memperbarui.',
                   ),
                 ),
               );
@@ -69,9 +67,9 @@ class _HomeOrtuPageState extends State<HomeOrtuPage> {
     }
   }
 
-  // =========================================================
-  // LOAD DATA ANAK
-  // =========================================================
+  // ---------------------------------------------------------------------------
+  // DATA ANAK
+  // ---------------------------------------------------------------------------
   Future<int> _loadChildCount() async {
     final user = Supabase.instance.client.auth.currentUser;
 
@@ -109,9 +107,17 @@ class _HomeOrtuPageState extends State<HomeOrtuPage> {
     } catch (error) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Gagal memuat data anak: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            friendlyError(
+              error,
+              fallback:
+                  'Data anak belum bisa dimuat. Tarik layar ke bawah untuk mencoba lagi.',
+            ),
+          ),
+        ),
+      );
     }
   }
 
@@ -124,13 +130,27 @@ class _HomeOrtuPageState extends State<HomeOrtuPage> {
     super.dispose();
   }
 
-  // =========================================================
+  // ---------------------------------------------------------------------------
   // NAVIGASI
-  // =========================================================
+  // ---------------------------------------------------------------------------
   void _open(BuildContext context, Widget page) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => page)).then((_) {
       _refreshChildCount();
     });
+  }
+
+  void _onNavigationTap(int index) {
+    final Widget? page = switch (index) {
+      1 => const DataAnakPage(),
+      2 => const JadwalPage(),
+      3 => const ArtikelPage(),
+      4 => const ProfilPage(),
+      _ => null,
+    };
+
+    if (page != null) {
+      _open(context, page);
+    }
   }
 
   Future<void> _openChildFeature(BuildContext context, Widget page) async {
@@ -166,32 +186,31 @@ class _HomeOrtuPageState extends State<HomeOrtuPage> {
       if (!context.mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal memeriksa data anak: $error')),
+        SnackBar(
+          content: Text(
+            friendlyError(
+              error,
+              fallback: 'Data anak belum bisa diperiksa. Coba lagi.',
+            ),
+          ),
+        ),
       );
     }
   }
 
-  // =========================================================
-  // BOTTOM NAVIGATION
-  // =========================================================
-  void _onNavigationTap(BuildContext context, int index) {
-    final page = switch (index) {
-      1 => const DataAnakPage(),
-      2 => const JadwalPage(),
-      3 => const ArtikelPage(),
-      4 => const ProfilPage(),
-      _ => null,
-    };
-
-    if (page != null) {
-      _open(context, page);
-    }
-  }
-
-  // =========================================================
-  // LOGOUT
-  // =========================================================
+  // ---------------------------------------------------------------------------
+  // KELUAR AKUN
+  // ---------------------------------------------------------------------------
   Future<void> _logout(BuildContext context) async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Keluar dari akun?',
+      message: 'Anda perlu masuk lagi untuk membuka SI-POSYANDU.',
+      confirmLabel: 'Keluar',
+      destructive: true,
+    );
+    if (!confirmed || !context.mounted) return;
+
     try {
       await Supabase.instance.client.auth.signOut();
 
@@ -205,842 +224,421 @@ class _HomeOrtuPageState extends State<HomeOrtuPage> {
     } catch (error) {
       if (!context.mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Gagal keluar dari akun: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            friendlyError(
+              error,
+              fallback: 'Belum bisa keluar dari akun. Coba lagi.',
+            ),
+          ),
+        ),
+      );
     }
   }
 
-  // =========================================================
-  // SERVICE CARD
-  // =========================================================
-  Widget _serviceCard({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Color iconBackground,
-    required Color iconColor,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: borderColor),
-            boxShadow: [
-              BoxShadow(
-                color: navy.withOpacity(0.035),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: iconBackground,
-                  borderRadius: BorderRadius.circular(13),
-                ),
-                child: Icon(icon, color: iconColor, size: 21),
-              ),
-
-              const SizedBox(width: 10),
-
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w800,
-                        color: navy,
-                      ),
-                    ),
-
-                    const SizedBox(height: 2),
-
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: secondaryText,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(width: 3),
-
-              const Icon(
-                Icons.chevron_right_rounded,
-                size: 18,
-                color: Color(0xFF94A3B8),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // =========================================================
-  // ARTICLE CARD
-  // =========================================================
-  Widget _buildArticleCard({
-    required BuildContext context,
-    required IconData icon,
-    required String category,
-    required String title,
-    required String description,
-    required String content,
-    required Color iconColor,
-  }) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(17),
-      child: InkWell(
-        onTap: () {
-          // LANGSUNG BUKA DETAIL ARTIKEL
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ArticleDetailPage(
-                title: title,
-                content: content,
-                icon: icon,
-                iconColor: iconColor,
-              ),
-            ),
-          );
-        },
-        borderRadius: BorderRadius.circular(17),
-        child: Container(
-          padding: const EdgeInsets.all(13),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(17),
-            border: Border.all(color: borderColor),
-            boxShadow: [
-              BoxShadow(
-                color: navy.withOpacity(0.035),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ICON ARTIKEL
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: lavenderLight,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(icon, color: iconColor, size: 27),
-              ),
-
-              const SizedBox(width: 12),
-
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // KATEGORI
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: lavenderLight,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        category,
-                        style: const TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w800,
-                          color: navy,
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 6),
-
-                    // JUDUL
-                    Text(
-                      title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: navy,
-                        height: 1.25,
-                      ),
-                    ),
-
-                    const SizedBox(height: 4),
-
-                    // DESKRIPSI
-                    Text(
-                      description,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 10.5,
-                        height: 1.35,
-                        color: secondaryText,
-                      ),
-                    ),
-
-                    const SizedBox(height: 6),
-
-                    const Row(
-                      children: [
-                        Text(
-                          'Baca artikel',
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w800,
-                            color: primaryBlue,
-                          ),
-                        ),
-                        SizedBox(width: 3),
-                        Icon(
-                          Icons.arrow_forward_rounded,
-                          size: 12,
-                          color: primaryBlue,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // =========================================================
-  // BOTTOM NAVIGATION
-  // =========================================================
-  Widget _bottomNavigationBar() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: const Border(top: BorderSide(color: borderColor)),
-        boxShadow: [
-          BoxShadow(
-            color: navy.withOpacity(0.05),
-            blurRadius: 12,
-            offset: const Offset(0, -3),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 68,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _bottomNavItem(
-                icon: Icons.home_rounded,
-                label: 'Beranda',
-                selected: true,
-                onTap: () {},
-              ),
-              _bottomNavItem(
-                icon: Icons.child_care_rounded,
-                label: 'Anak',
-                onTap: () {
-                  _open(context, const DataAnakPage());
-                },
-              ),
-              _bottomNavItem(
-                icon: Icons.calendar_month_rounded,
-                label: 'Jadwal',
-                onTap: () {
-                  _open(context, const JadwalPage());
-                },
-              ),
-              _bottomNavItem(
-                icon: Icons.article_outlined,
-                label: 'Artikel',
-                onTap: () {
-                  _open(context, const ArtikelPage());
-                },
-              ),
-              _bottomNavItem(
-                icon: Icons.person_outline_rounded,
-                label: 'Profil',
-                onTap: () {
-                  _open(context, const ProfilPage());
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _bottomNavItem({
-    required IconData icon,
-    required String label,
-    bool selected = false,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: SizedBox(
-        width: 58,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 22,
-              color: selected ? primaryBlue : const Color(0xFF94A3B8),
-            ),
-
-            const SizedBox(height: 3),
-
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 9.5,
-                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                color: selected ? primaryBlue : const Color(0xFF94A3B8),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // =========================================================
+  // ---------------------------------------------------------------------------
   // BUILD
-  // =========================================================
+  // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     final user = Supabase.instance.client.auth.currentUser;
-
-    final rawName = user?.userMetadata?['display_name'];
-
-    final name = rawName is String && rawName.trim().isNotEmpty
-        ? rawName.trim()
-        : 'Bunda';
+    final name = displayNameFromUser(user, fallback: 'Bapak/Ibu');
+    final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: lavenderLight,
-
-      // =====================================================
-      // APP BAR
-      // =====================================================
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        backgroundColor: lavenderLight,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        toolbarHeight: 58,
-        titleSpacing: 18,
-
+        toolbarHeight: 60,
+        titleSpacing: AppSpace.page,
         title: Row(
           children: [
             Container(
-              width: 34,
-              height: 34,
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
+                color: scheme.primaryContainer,
+                borderRadius: AppRadius.controlAll,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.health_and_safety_rounded,
-                color: primaryBlue,
-                size: 21,
+                color: scheme.primary,
+                size: 22,
               ),
             ),
-
-            const SizedBox(width: 9),
-
-            const Text(
-              'SI-POSYANDU',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w900,
-                color: navy,
-                letterSpacing: 0.3,
+            const SizedBox(width: AppSpace.sm + 2),
+            Flexible(
+              child: Text(
+                'SI-POSYANDU',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppText.label.copyWith(fontSize: 16, letterSpacing: 0.3),
               ),
             ),
           ],
         ),
-
         actions: [
-          IconButton(
-            tooltip: 'Notifikasi',
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Belum ada notifikasi baru.')),
-              );
-            },
-            style: IconButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: primaryBlue,
-            ),
-            icon: const Icon(Icons.notifications_none_rounded, size: 21),
-          ),
-
-          const SizedBox(width: 2),
-
-          IconButton(
-            tooltip: 'Keluar',
-            onPressed: () => _logout(context),
-            style: IconButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: navy,
-            ),
-            icon: const Icon(Icons.logout_rounded, size: 20),
-          ),
-
-          const SizedBox(width: 12),
+          LogoutButton(onPressed: () => _logout(context)),
+          const SizedBox(width: AppSpace.md),
         ],
       ),
 
-      // =====================================================
-      // BODY
-      // =====================================================
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _refresh,
-          color: primaryBlue,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(18, 2, 18, 20),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpace.page,
+              AppSpace.sm,
+              AppSpace.page,
+              AppSpace.xl,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // =================================================
-                // GREETING
-                // =================================================
-                const Text(
-                  'Selamat pagi,',
-                  style: TextStyle(fontSize: 12, color: secondaryText),
-                ),
-
-                const SizedBox(height: 1),
-
+                // Sapaan
                 Text(
-                  '$name 👋',
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w900,
-                    color: navy,
-                  ),
+                  greetingNow(),
+                  style: AppText.body.copyWith(color: AppColors.secondaryText),
                 ),
-
-                const SizedBox(height: 3),
-
-                const Text(
+                Text(
+                  name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.headline,
+                ),
+                const SizedBox(height: AppSpace.xs),
+                Text(
                   'Pantau kesehatan dan tumbuh kembang si kecil.',
-                  style: TextStyle(fontSize: 11.5, color: secondaryText),
+                  style: AppText.body.copyWith(color: AppColors.secondaryText),
                 ),
+                const SizedBox(height: AppSpace.lg),
 
-                const SizedBox(height: 14),
-
-                // =================================================
-                // DATA ANAK
-                // =================================================
+                // Ringkasan data anak
                 FutureBuilder<int>(
                   future: _childCount,
                   builder: (context, snapshot) {
-                    if (snapshot.hasError) {
-                      return Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: borderColor),
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(
-                              Icons.info_outline_rounded,
-                              color: primaryBlue,
-                            ),
-                            SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                'Data anak belum dapat dimuat.',
-                                style: TextStyle(
-                                  color: navy,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    if (!snapshot.hasData) {
-                      return Container(
-                        width: double.infinity,
-                        height: 92,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: borderColor),
-                        ),
-                        child: const Center(
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: primaryBlue,
-                          ),
-                        ),
-                      );
-                    }
-
-                    final count = snapshot.data!;
-
-                    // =============================================
-                    // BELUM ADA ANAK
-                    // =============================================
-                    if (count == 0) {
-                      return Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(15),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: lavender.withOpacity(0.55)),
-                          boxShadow: [
-                            BoxShadow(
-                              color: navy.withOpacity(0.04),
-                              blurRadius: 12,
-                              offset: const Offset(0, 5),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 52,
-                              height: 52,
-                              decoration: BoxDecoration(
-                                color: lavenderLight,
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                              child: const Icon(
-                                Icons.child_care_rounded,
-                                color: primaryBlue,
-                                size: 28,
-                              ),
-                            ),
-
-                            const SizedBox(width: 12),
-
-                            const Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Belum ada data si kecil',
-                                    style: TextStyle(
-                                      fontSize: 13.5,
-                                      fontWeight: FontWeight.w900,
-                                      color: navy,
-                                    ),
-                                  ),
-                                  SizedBox(height: 3),
-                                  Text(
-                                    'Tambahkan data anak untuk mulai memantau perkembangannya.',
-                                    maxLines: 2,
-                                    style: TextStyle(
-                                      fontSize: 10.5,
-                                      height: 1.35,
-                                      color: secondaryText,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            const SizedBox(width: 7),
-
-                            IconButton(
-                              onPressed: () {
-                                _open(context, const DataAnakPage());
-                              },
-                              style: IconButton.styleFrom(
-                                backgroundColor: primaryBlue,
-                                foregroundColor: Colors.white,
-                                minimumSize: const Size(38, 38),
-                              ),
-                              icon: const Icon(
-                                Icons.arrow_forward_rounded,
-                                size: 18,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    // =============================================
-                    // ADA DATA ANAK
-                    // =============================================
-                    return Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(15),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: lavender.withOpacity(0.55)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: navy.withOpacity(0.04),
-                            blurRadius: 12,
-                            offset: const Offset(0, 5),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 52,
-                            height: 52,
-                            decoration: BoxDecoration(
-                              color: lavenderLight,
-                              borderRadius: BorderRadius.circular(15),
-                            ),
-                            child: const Icon(
-                              Icons.child_care_rounded,
-                              color: primaryBlue,
-                              size: 28,
-                            ),
-                          ),
-
-                          const SizedBox(width: 12),
-
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Data anak terdaftar',
-                                  style: TextStyle(
-                                    fontSize: 10.5,
-                                    color: secondaryText,
-                                  ),
-                                ),
-                                const SizedBox(height: 1),
-                                Text(
-                                  '$count anak',
-                                  style: const TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w900,
-                                    color: navy,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          OutlinedButton(
-                            onPressed: () {
-                              _open(context, const DataAnakPage());
-                            },
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: primaryBlue,
-                              side: const BorderSide(color: primaryBlue),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 13,
-                                vertical: 8,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                            child: const Text(
-                              'Lihat',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                    return _ChildSummaryCard(
+                      snapshot: snapshot,
+                      onOpen: () => _open(context, const DataAnakPage()),
+                      onRetry: _refreshChildCount,
                     );
                   },
                 ),
+                const SizedBox(height: AppSpace.xl),
 
-                const SizedBox(height: 18),
-
-                // =================================================
-                // LAYANAN
-                // =================================================
-                const Text(
-                  'Layanan keluarga',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w900,
-                    color: navy,
-                  ),
+                // Layanan
+                const SectionHeader(
+                  title: 'Layanan keluarga',
+                  subtitle: 'Akses informasi kesehatan si kecil.',
                 ),
-
-                const SizedBox(height: 3),
-
-                const Text(
-                  'Akses informasi kesehatan si kecil.',
-                  style: TextStyle(fontSize: 11, color: secondaryText),
-                ),
-
-                const SizedBox(height: 10),
-
-                GridView.count(
-                  crossAxisCount: 2,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: 9,
-                  crossAxisSpacing: 9,
-                  childAspectRatio: 2.05,
+                const SizedBox(height: AppSpace.md),
+                ServiceGrid(
                   children: [
-                    _serviceCard(
+                    ServiceTile(
                       icon: Icons.child_care_rounded,
                       title: 'Data Anak',
                       subtitle: 'Identitas si kecil',
-                      iconBackground: lavenderLight,
-                      iconColor: primaryBlue,
-                      onTap: () {
-                        _open(context, const DataAnakPage());
-                      },
+                      onTap: () => _open(context, const DataAnakPage()),
                     ),
-
-                    _serviceCard(
+                    ServiceTile(
                       icon: Icons.show_chart_rounded,
                       title: 'Grafik Tumbuh',
                       subtitle: 'Pantau perkembangan',
-                      iconBackground: lavenderLight,
-                      iconColor: lavender,
-                      onTap: () {
-                        _openChildFeature(context, const PerkembanganPage());
-                      },
+                      onTap: () =>
+                          _openChildFeature(context, const PerkembanganPage()),
                     ),
-
-                    _serviceCard(
+                    ServiceTile(
                       icon: Icons.vaccines_outlined,
                       title: 'Imunisasi',
                       subtitle: 'Jadwal & riwayat',
-                      iconBackground: const Color(0xFFEAF3FA),
-                      iconColor: primaryBlue,
-                      onTap: () {
-                        _openChildFeature(
-                          context,
-                          const RiwayatPage(onlyVaccinations: true),
-                        );
-                      },
+                      onTap: () => _openChildFeature(
+                        context,
+                        const RiwayatPage(onlyVaccinations: true),
+                      ),
                     ),
-
-                    _serviceCard(
+                    ServiceTile(
                       icon: Icons.history_rounded,
                       title: 'Riwayat Anak',
                       subtitle: 'Catatan kesehatan',
-                      iconBackground: lavenderLight,
-                      iconColor: lavender,
-                      onTap: () {
-                        _openChildFeature(context, const RiwayatPage());
-                      },
+                      onTap: () =>
+                          _openChildFeature(context, const RiwayatPage()),
                     ),
                   ],
                 ),
+                const SizedBox(height: AppSpace.xl),
 
-                const SizedBox(height: 18),
-
-                // =================================================
-                // ARTIKEL
-                // =================================================
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Artikel untuk Bunda',
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w900,
-                          color: navy,
-                        ),
-                      ),
-                    ),
-
-                    TextButton(
-                      onPressed: () {
-                        _open(context, const ArtikelPage());
-                      },
-                      style: TextButton.styleFrom(
-                        foregroundColor: primaryBlue,
-                        padding: const EdgeInsets.symmetric(horizontal: 3),
-                      ),
-                      child: const Text(
-                        'Lihat semua',
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                  ],
+                // Artikel
+                SectionHeader(
+                  title: 'Artikel untuk orang tua',
+                  subtitle:
+                      'Informasi sederhana untuk menemani tumbuh kembang si kecil.',
+                  actionLabel: 'Lihat semua',
+                  onAction: () => _open(context, const ArtikelPage()),
                 ),
+                const SizedBox(height: AppSpace.md),
+                for (var i = 0; i < _articles.length; i++) ...[
+                  if (i > 0) const SizedBox(height: AppSpace.md),
+                  _ArticleCard(article: _articles[i]),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
 
-                const SizedBox(height: 1),
+      bottomNavigationBar: AppBottomNav(
+        isKader: false,
+        selectedIndex: 0,
+        onTap: _onNavigationTap,
+      ),
+    );
+  }
+}
 
-                const Text(
-                  'Informasi sederhana untuk menemani tumbuh kembang si kecil.',
-                  style: TextStyle(fontSize: 11, color: secondaryText),
+// =============================================================================
+// RINGKASAN DATA ANAK
+// =============================================================================
+class _ChildSummaryCard extends StatelessWidget {
+  final AsyncSnapshot<int> snapshot;
+  final VoidCallback onOpen;
+  final VoidCallback onRetry;
+
+  const _ChildSummaryCard({
+    required this.snapshot,
+    required this.onOpen,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (snapshot.hasError) {
+      return AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(AppStatus.danger.icon, color: AppStatus.danger.foreground),
+                const SizedBox(width: AppSpace.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Data anak belum bisa dimuat',
+                        style: AppText.subtitle,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Periksa koneksi internet Anda, lalu coba lagi.',
+                        style: AppText.body,
+                      ),
+                    ],
+                  ),
                 ),
+              ],
+            ),
+            const SizedBox(height: AppSpace.md),
+            AppButton(
+              label: 'Coba lagi',
+              icon: Icons.refresh_rounded,
+              onPressed: onRetry,
+              expand: false,
+              variant: AppButtonVariant.secondary,
+            ),
+          ],
+        ),
+      );
+    }
 
-                const SizedBox(height: 9),
+    if (!snapshot.hasData) {
+      return const AppCard(child: SizedBox(height: 60, child: LoadingState()));
+    }
 
-                // =================================================
-                // ARTIKEL 1
-                // =================================================
-                _buildArticleCard(
-                  context: context,
-                  icon: Icons.restaurant_rounded,
-                  iconColor: const Color(0xFF2E9B61),
-                  category: 'GIZI ANAK',
-                  title: 'Penuhi Gizi Si Kecil Sejak Dini',
-                  description:
-                      'Kenali pentingnya makanan bergizi untuk mendukung pertumbuhan anak.',
-                  content: '''
+    final count = snapshot.data!;
+
+    if (count == 0) {
+      return AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const _IconBadge(icon: Icons.child_care_rounded),
+                const SizedBox(width: AppSpace.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Belum ada data si kecil', style: AppText.subtitle),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Tambahkan data anak untuk mulai memantau perkembangannya.',
+                        style: AppText.body,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpace.lg),
+            AppButton(label: 'Tambah data anak', onPressed: onOpen),
+          ],
+        ),
+      );
+    }
+
+    return AppCard(
+      child: Row(
+        children: [
+          const _IconBadge(icon: Icons.child_care_rounded),
+          const SizedBox(width: AppSpace.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Data anak terdaftar', style: AppText.caption),
+                Text('$count anak', style: AppText.title),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpace.sm),
+          AppButton(
+            label: 'Lihat',
+            onPressed: onOpen,
+            expand: false,
+            variant: AppButtonVariant.secondary,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _IconBadge extends StatelessWidget {
+  final IconData icon;
+
+  const _IconBadge({required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: 52,
+      height: 52,
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer,
+        borderRadius: AppRadius.controlAll,
+      ),
+      child: Icon(icon, size: 28, color: scheme.primary),
+    );
+  }
+}
+
+// =============================================================================
+// ARTIKEL
+// =============================================================================
+class _Article {
+  final IconData icon;
+  final Color iconColor;
+  final String category;
+  final String title;
+  final String description;
+  final String content;
+
+  const _Article({
+    required this.icon,
+    required this.iconColor,
+    required this.category,
+    required this.title,
+    required this.description,
+    required this.content,
+  });
+}
+
+class _ArticleCard extends StatelessWidget {
+  final _Article article;
+
+  const _ArticleCard({required this.article});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return AppCard(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ArticleDetailPage(
+              title: article.title,
+              content: article.content,
+              icon: article.icon,
+              iconColor: article.iconColor,
+            ),
+          ),
+        );
+      },
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: scheme.primaryContainer,
+              borderRadius: AppRadius.controlAll,
+            ),
+            child: Icon(article.icon, size: 24, color: scheme.primary),
+          ),
+          const SizedBox(width: AppSpace.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  article.category,
+                  style: AppText.caption.copyWith(
+                    color: scheme.primary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  article.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.subtitle,
+                ),
+                const SizedBox(height: AppSpace.xs),
+                Text(
+                  article.description,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.body.copyWith(color: AppColors.secondaryText),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+const _articles = <_Article>[
+  _Article(
+    icon: Icons.restaurant_rounded,
+    iconColor: Color(0xFF2E9B61),
+    category: 'Gizi anak',
+    title: 'Penuhi Gizi Si Kecil Sejak Dini',
+    description:
+        'Kenali pentingnya makanan bergizi untuk mendukung pertumbuhan anak.',
+    content: '''
 Makanan bergizi merupakan bagian penting dalam mendukung pertumbuhan dan perkembangan anak.
 
 Sejak dini, anak membutuhkan makanan yang beragam dan bergizi untuk membantu memenuhi kebutuhan tubuhnya. Orang tua dapat mengenalkan berbagai jenis makanan dengan memperhatikan sumber karbohidrat, protein, sayur, buah, dan kebutuhan cairan anak.
@@ -1051,22 +649,15 @@ Orang tua juga dapat memantau kebiasaan makan dan pertumbuhan anak secara rutin 
 
 Jika anak memiliki kondisi khusus atau mengalami masalah makan, sebaiknya konsultasikan dengan tenaga kesehatan agar mendapatkan saran yang sesuai.
 ''',
-                ),
-
-                const SizedBox(height: 9),
-
-                // =================================================
-                // ARTIKEL 2
-                // =================================================
-                _buildArticleCard(
-                  context: context,
-                  icon: Icons.vaccines_rounded,
-                  iconColor: const Color(0xFF2388D9),
-                  category: 'IMUNISASI',
-                  title: 'Mengapa Imunisasi Itu Penting?',
-                  description:
-                      'Kenali manfaat imunisasi dan ikuti jadwal sesuai anjuran tenaga kesehatan.',
-                  content: '''
+  ),
+  _Article(
+    icon: Icons.vaccines_rounded,
+    iconColor: Color(0xFF2388D9),
+    category: 'Imunisasi',
+    title: 'Mengapa Imunisasi Itu Penting?',
+    description:
+        'Kenali manfaat imunisasi dan ikuti jadwal sesuai anjuran tenaga kesehatan.',
+    content: '''
 Imunisasi merupakan salah satu upaya penting untuk membantu melindungi anak dari penyakit tertentu yang dapat dicegah dengan imunisasi.
 
 Melalui imunisasi, tubuh anak mendapatkan perlindungan sehingga dapat membantu mengurangi risiko terkena penyakit tertentu.
@@ -1077,22 +668,15 @@ Selain imunisasi, orang tua tetap perlu memperhatikan pola makan, kebersihan, is
 
 Jika memiliki pertanyaan mengenai jenis atau jadwal imunisasi, orang tua dapat berkonsultasi dengan kader atau tenaga kesehatan di Posyandu.
 ''',
-                ),
-
-                const SizedBox(height: 9),
-
-                // =================================================
-                // ARTIKEL 3
-                // =================================================
-                _buildArticleCard(
-                  context: context,
-                  icon: Icons.child_care_rounded,
-                  iconColor: const Color(0xFFE58A25),
-                  category: 'TUMBUH KEMBANG',
-                  title: 'Pantau Pertumbuhan Anak Secara Rutin',
-                  description:
-                      'Pencatatan berat dan tinggi badan membantu memantau pertumbuhan anak.',
-                  content: '''
+  ),
+  _Article(
+    icon: Icons.child_care_rounded,
+    iconColor: Color(0xFFE58A25),
+    category: 'Tumbuh kembang',
+    title: 'Pantau Pertumbuhan Anak Secara Rutin',
+    description:
+        'Pencatatan berat dan tinggi badan membantu memantau pertumbuhan anak.',
+    content: '''
 Memantau pertumbuhan anak secara rutin membantu orang tua mengetahui perubahan kondisi anak dari waktu ke waktu.
 
 Kegiatan Posyandu dapat menjadi salah satu kesempatan bagi orang tua untuk melakukan pemantauan pertumbuhan anak secara berkala.
@@ -1103,19 +687,5 @@ Catatan pertumbuhan tersebut dapat membantu orang tua dan tenaga kesehatan melih
 
 Selain memantau pertumbuhan fisik, orang tua juga perlu memperhatikan perkembangan kemampuan anak sesuai usianya. Jika terdapat hal yang membuat khawatir, konsultasikan dengan tenaga kesehatan.
 ''',
-                ),
-
-                const SizedBox(height: 4),
-              ],
-            ),
-          ),
-        ),
-      ),
-
-      // ========================================================
-      // BOTTOM NAVIGATION BAR
-      // ========================================================
-      bottomNavigationBar: _bottomNavigationBar(),
-    );
-  }
-}
+  ),
+];

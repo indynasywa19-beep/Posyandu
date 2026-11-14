@@ -1,6 +1,10 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
+import 'app_components.dart';
+import 'app_nav.dart';
+import 'app_theme.dart';
+import 'app_widgets.dart';
+import 'design_tokens.dart';
 
 /// Reusable widgets specifically crafted for the KADER role interface.
 /// Preserves separation from Orang Tua widgets to avoid any regression.
@@ -9,107 +13,89 @@ class KaderBottomAppBar extends StatelessWidget {
   final int selectedIndex; // 0: Beranda, 1: Anak, 2: Jadwal, 3: Profil
   final ValueChanged<int> onTabSelected;
 
+  /// Label di bawah tombol tengah. Harus sama dengan aksi tombol tengah
+  /// ([KaderCenterFab]) di halaman yang memanggil.
+  final String centerLabel;
+
   const KaderBottomAppBar({
     super.key,
     required this.selectedIndex,
     required this.onTabSelected,
+    this.centerLabel = 'Catat gizi',
   });
+
+  static const _beranda = NavDestination(
+    icon: Icons.home_outlined,
+    selectedIcon: Icons.home_rounded,
+    label: 'Beranda',
+  );
+  static const _anak = NavDestination(
+    icon: Icons.people_outline_rounded,
+    selectedIcon: Icons.people_rounded,
+    label: 'Anak',
+  );
+  static const _jadwal = NavDestination(
+    icon: Icons.calendar_month_outlined,
+    selectedIcon: Icons.calendar_month_rounded,
+    label: 'Jadwal',
+  );
+  static const _profil = NavDestination(
+    icon: Icons.person_outline_rounded,
+    selectedIcon: Icons.person_rounded,
+    label: 'Profil',
+  );
 
   @override
   Widget build(BuildContext context) {
+    const palette = RolePalette.kader;
+
+    Widget tile(NavDestination d, int index) => Expanded(
+      child: AppNavTile(
+        destination: d,
+        selected: selectedIndex == index,
+        palette: palette,
+        onTap: () => onTabSelected(index),
+      ),
+    );
+
     return BottomAppBar(
       shape: const CircularNotchedRectangle(),
       notchMargin: 6,
       height: 72,
-      color: Colors.white,
+      color: AppColors.surface,
       surfaceTintColor: Colors.transparent,
       shadowColor: Colors.black38,
-      elevation: 8,
+      elevation: 4,
       padding: EdgeInsets.zero,
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          Expanded(
-            child: _KaderNavItem(
-              icon: Icons.home_outlined,
-              label: 'Beranda',
-              isSelected: selectedIndex == 0,
-              onTap: () => onTabSelected(0),
-            ),
-          ),
-          Expanded(
-            child: _KaderNavItem(
-              icon: Icons.people_outline_rounded,
-              label: 'Anak',
-              isSelected: selectedIndex == 1,
-              onTap: () => onTabSelected(1),
-            ),
-          ),
-          const SizedBox(width: 68), // Space for center docked FAB notch
-          Expanded(
-            child: _KaderNavItem(
-              icon: Icons.calendar_month_outlined,
-              label: 'Jadwal',
-              isSelected: selectedIndex == 2,
-              onTap: () => onTabSelected(2),
-            ),
-          ),
-          Expanded(
-            child: _KaderNavItem(
-              icon: Icons.person_outline_rounded,
-              label: 'Profil',
-              isSelected: selectedIndex == 3,
-              onTap: () => onTabSelected(3),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _KaderNavItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _KaderNavItem({
-    required this.icon,
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    const activeColor = Color(0xFF1D4ED8);
-    const inactiveColor = Color(0xFF94A3B8);
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 22,
-              color: isSelected ? activeColor : inactiveColor,
-            ),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              style: GoogleFonts.nunito(
-                fontSize: 11,
-                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                color: isSelected ? activeColor : inactiveColor,
+          tile(_beranda, 0),
+          tile(_anak, 1),
+          // Ruang untuk tombol tengah yang menempel di takik. Labelnya ada di
+          // sini karena tombol melayang (FAB) tidak punya label sendiri.
+          SizedBox(
+            width: 76,
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    centerLabel,
+                    maxLines: 1,
+                    style: AppText.caption.copyWith(
+                      color: palette.primary,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
               ),
             ),
-          ],
-        ),
+          ),
+          tile(_jadwal, 2),
+          tile(_profil, 3),
+        ],
       ),
     );
   }
@@ -122,7 +108,7 @@ class KaderCenterFab extends StatelessWidget {
   const KaderCenterFab({
     super.key,
     required this.onPressed,
-    this.tooltip = 'Catat Gizi',
+    this.tooltip = 'Catat gizi',
   });
 
   @override
@@ -131,211 +117,102 @@ class KaderCenterFab extends StatelessWidget {
       onPressed: onPressed,
       tooltip: tooltip,
       shape: const CircleBorder(),
-      backgroundColor: const Color(0xFF1D4ED8),
-      elevation: 4,
-      child: const Icon(
-        Icons.edit_note_rounded,
-        color: Colors.white,
-        size: 28,
-      ),
+      backgroundColor: RolePalette.kader.primary,
+      foregroundColor: RolePalette.kader.onPrimary,
+      elevation: 3,
+      child: const Icon(Icons.edit_note_rounded, size: 28),
     );
   }
 }
 
+/// Tombol keluar akun Kader. Memakai [LogoutButton] yang sama dengan
+/// Orang Tua: area sentuh 48 dp dan ada tooltip/label untuk pembaca layar.
 class KaderLogoutButton extends StatelessWidget {
   final VoidCallback onPressed;
 
   const KaderLogoutButton({super.key, required this.onPressed});
 
   @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0xFFFFE4E6),
-      shape: const CircleBorder(),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onPressed,
-        customBorder: const CircleBorder(),
-        child: const SizedBox(
-          width: 40,
-          height: 40,
-          child: Icon(
-            Icons.logout_rounded,
-            color: Color(0xFFBE123C),
-            size: 20,
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => LogoutButton(onPressed: onPressed);
 }
 
+/// Ringkasan di beranda Kader: tanggal, jumlah anak, dan aksi utama.
+/// Datar, satu warna, tanpa dekorasi.
 class KaderHeroCard extends StatelessWidget {
   final String dateLabel;
   final String countText;
   final VoidCallback onActionPressed;
+  final String actionLabel;
+
+  /// Bila diisi, tombol "Coba lagi" tampil di samping aksi utama.
+  final VoidCallback? onRetry;
 
   const KaderHeroCard({
     super.key,
     required this.dateLabel,
     required this.countText,
     required this.onActionPressed,
+    this.actionLabel = 'Mulai timbang',
+    this.onRetry,
   });
 
   @override
   Widget build(BuildContext context) {
+    const palette = RolePalette.kader;
+
     return Container(
       width: double.infinity,
+      padding: const EdgeInsets.all(AppSpace.xl - 4),
       decoration: BoxDecoration(
-        color: const Color(0xFF1D4ED8),
-        borderRadius: BorderRadius.circular(24),
+        color: palette.primary,
+        borderRadius: AppRadius.cardAll,
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: Stack(
-          children: [
-            Positioned(
-              right: -30,
-              top: -40,
-              child: Container(
-                width: 140,
-                height: 140,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.08),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            dateLabel,
+            style: AppText.caption.copyWith(color: AppColors.kaderMid),
+          ),
+          const SizedBox(height: 6),
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              countText,
+              style: AppText.title.copyWith(color: Colors.white),
+            ),
+          ),
+          const SizedBox(height: AppSpace.lg),
+          Wrap(
+            spacing: AppSpace.sm,
+            runSpacing: AppSpace.sm,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              FilledButton(
+                onPressed: onActionPressed,
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: palette.primary,
+                  minimumSize: const Size(64, AppSize.touch),
                 ),
+                child: Text(actionLabel),
               ),
-            ),
-            Positioned(
-              right: 40,
-              bottom: -60,
-              child: Container(
-                width: 130,
-                height: 130,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.05),
+              if (onRetry != null)
+                TextButton(
+                  onPressed: onRetry,
+                  style: TextButton.styleFrom(foregroundColor: Colors.white),
+                  child: const Text('Coba lagi'),
                 ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          dateLabel,
-                          style: GoogleFonts.nunito(
-                            color: Colors.white.withValues(alpha: 0.82),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          countText,
-                          style: GoogleFonts.fredoka(
-                            color: Colors.white,
-                            fontSize: 19,
-                            fontWeight: FontWeight.w600,
-                            height: 1.2,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        FilledButton(
-                          onPressed: onActionPressed,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: const Color(0xFF1D4ED8),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 18,
-                              vertical: 10,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            elevation: 0,
-                          ),
-                          child: Text(
-                            'Mulai timbang',
-                            style: GoogleFonts.nunito(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 13,
-                              color: const Color(0xFF1D4ED8),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const KaderProgressDonut(size: 68),
-                ],
-              ),
-            ),
-          ],
-        ),
+            ],
+          ),
+        ],
       ),
     );
   }
 }
 
-class KaderProgressDonut extends StatelessWidget {
-  final double size;
-
-  const KaderProgressDonut({super.key, this.size = 68});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: CustomPaint(
-        painter: _KaderProgressDonutPainter(),
-      ),
-    );
-  }
-}
-
-class _KaderProgressDonutPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final strokeWidth = size.width * 0.16;
-    final radius = (size.width - strokeWidth) / 2;
-
-    // Track circle (translucent light blue)
-    final trackPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.22)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth;
-
-    canvas.drawCircle(center, radius, trackPaint);
-
-    // Accent progress arc (yellow)
-    final yellowPaint = Paint()
-      ..color = const Color(0xFFFACC15)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
-
-    // Yellow arc from top to lower right
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      -math.pi / 2,
-      math.pi * 0.75,
-      false,
-      yellowPaint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
+/// Kolom cari yang membuka daftar anak. Ini tombol, bukan kolom isian,
+/// jadi dilabeli sebagai tombol untuk pembaca layar.
 class KaderSearchBar extends StatelessWidget {
   final String hintText;
   final VoidCallback onTap;
@@ -348,31 +225,46 @@ class KaderSearchBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0xFFEFF6FF), // soft blue #EFF6FF
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.search_rounded,
-                color: Color(0xFF64748B),
-                size: 20,
+    return Semantics(
+      button: true,
+      label: hintText,
+      excludeSemantics: true,
+      onTap: onTap,
+      child: Material(
+        color: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppRadius.controlAll,
+          side: const BorderSide(color: AppColors.divider),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: AppSize.touch),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpace.lg,
+                vertical: AppSpace.md,
               ),
-              const SizedBox(width: 10),
-              Text(
-                hintText,
-                style: GoogleFonts.nunito(
-                  color: const Color(0xFF64748B),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.search_rounded,
+                    color: AppColors.secondaryText,
+                    size: 22,
+                  ),
+                  const SizedBox(width: AppSpace.md),
+                  Expanded(
+                    child: Text(
+                      hintText,
+                      style: AppText.body.copyWith(
+                        color: AppColors.secondaryText,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -380,101 +272,6 @@ class KaderSearchBar extends StatelessWidget {
   }
 }
 
-class KaderMenuBubble extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color backgroundColor;
-  final Color iconColor;
-  final VoidCallback onTap;
-
-  const KaderMenuBubble({
-    super.key,
-    required this.icon,
-    required this.label,
-    required this.backgroundColor,
-    required this.iconColor,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: label,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(22),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                color: backgroundColor,
-                borderRadius: BorderRadius.circular(22),
-              ),
-              child: Icon(icon, color: iconColor, size: 28),
-            ),
-            const SizedBox(height: 7),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.nunito(
-                color: const Color(0xFF0F172A),
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                height: 1.15,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class KaderDashedDivider extends StatelessWidget {
-  final Color color;
-  final double height;
-  final double dashWidth;
-  final double dashSpace;
-
-  const KaderDashedDivider({
-    super.key,
-    this.color = const Color(0xFFE2E8F0),
-    this.height = 1,
-    this.dashWidth = 4,
-    this.dashSpace = 3,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: height,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final total = constraints.maxWidth;
-          final count = (total / (dashWidth + dashSpace)).floor();
-          return Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: List.generate(
-              count,
-              (_) => SizedBox(
-                width: dashWidth,
-                height: height,
-                child: ColoredBox(color: color),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
 
 class KaderTopBar extends StatelessWidget {
   final String title;
@@ -498,40 +295,24 @@ class KaderTopBar extends StatelessWidget {
       children: [
         if (showBack) ...[
           IconButton(
+            tooltip: 'Kembali',
             onPressed: onBack ?? () => Navigator.maybePop(context),
-            icon: const Icon(
-              Icons.chevron_left_rounded,
-              size: 28,
-              color: Color(0xFF0F172A),
-            ),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            icon: const Icon(Icons.chevron_left_rounded, size: 30),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: AppSpace.xs),
         ],
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                title,
-                style: GoogleFonts.fredoka(
-                  color: const Color(0xFF0F172A),
-                  fontSize: 22,
-                  fontWeight: FontWeight.w600,
-                ),
+              Semantics(
+                header: true,
+                child: Text(title, style: AppText.title),
               ),
               if (subtitle != null) ...[
                 const SizedBox(height: 2),
-                Text(
-                  subtitle!,
-                  style: GoogleFonts.nunito(
-                    color: const Color(0xFF64748B),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                Text(subtitle!, style: AppText.caption),
               ],
             ],
           ),
@@ -546,236 +327,33 @@ class KaderInfoPill extends StatelessWidget {
   final IconData icon;
   final String message;
 
-  const KaderInfoPill({
-    super.key,
-    required this.icon,
-    required this.message,
-  });
+  const KaderInfoPill({super.key, required this.icon, required this.message});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpace.md + 2,
+        vertical: AppSpace.sm + 2,
+      ),
       decoration: BoxDecoration(
-        color: const Color(0xFFEFF6FF), // soft blue
-        borderRadius: BorderRadius.circular(16),
+        color: AppColors.kaderSoft,
+        borderRadius: AppRadius.controlAll,
       ),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: const Color(0xFF1D4ED8)),
-          const SizedBox(width: 8),
+          Icon(icon, size: 18, color: AppColors.kader),
+          const SizedBox(width: AppSpace.sm),
           Expanded(
             child: Text(
               message,
-              style: GoogleFonts.nunito(
-                color: const Color(0xFF1D4ED8),
-                fontSize: 12,
+              style: AppText.caption.copyWith(
+                color: AppColors.kader,
                 fontWeight: FontWeight.w700,
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class KaderNumberStepper extends StatelessWidget {
-  final String label;
-  final String unit;
-  final double value;
-  final double step;
-  final double min;
-  final double max;
-  final String? subtitle;
-  final ValueChanged<double> onChanged;
-
-  const KaderNumberStepper({
-    super.key,
-    required this.label,
-    required this.unit,
-    required this.value,
-    this.step = 0.1,
-    this.min = 0.0,
-    this.max = 300.0,
-    this.subtitle,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: GoogleFonts.nunito(
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.8,
-              color: const Color(0xFF64748B),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Material(
-                color: const Color(0xFFEFF6FF),
-                shape: const CircleBorder(),
-                child: InkWell(
-                  onTap: value > min
-                      ? () {
-                          final next = (value - step).clamp(min, max);
-                          onChanged(double.parse(next.toStringAsFixed(1)));
-                        }
-                      : null,
-                  customBorder: const CircleBorder(),
-                  child: const SizedBox(
-                    width: 46,
-                    height: 46,
-                    child: Icon(
-                      Icons.remove_rounded,
-                      color: Color(0xFF1D4ED8),
-                      size: 24,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 20),
-              GestureDetector(
-                onTap: () async {
-                  final textCtrl = TextEditingController(
-                    text: value > 0 ? value.toStringAsFixed(1) : '',
-                  );
-                  final entered = await showDialog<String>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      title: Text(
-                        'Masukkan $label',
-                        style: GoogleFonts.fredoka(fontWeight: FontWeight.w600),
-                      ),
-                      content: TextField(
-                        controller: textCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        autofocus: true,
-                        decoration: InputDecoration(
-                          hintText: 'Contoh: 12.4',
-                          suffixText: unit,
-                        ),
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text('Batal'),
-                        ),
-                        FilledButton(
-                          onPressed: () => Navigator.pop(ctx, textCtrl.text),
-                          child: const Text('Simpan'),
-                        ),
-                      ],
-                    ),
-                  );
-                  if (entered != null) {
-                    final parsed = double.tryParse(entered.replaceAll(',', '.'));
-                    if (parsed != null) {
-                      onChanged(
-                        double.parse(parsed.clamp(min, max).toStringAsFixed(1)),
-                      );
-                    }
-                  }
-                },
-                child: Container(
-                  constraints: const BoxConstraints(minWidth: 120),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      Text(
-                        value.toStringAsFixed(1),
-                        style: GoogleFonts.fredoka(
-                          fontSize: 32,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF0F172A),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        unit,
-                        style: GoogleFonts.nunito(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF64748B),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 20),
-              Material(
-                color: const Color(0xFF1D4ED8),
-                shape: const CircleBorder(),
-                child: InkWell(
-                  onTap: value < max
-                      ? () {
-                          final next = (value + step).clamp(min, max);
-                          onChanged(double.parse(next.toStringAsFixed(1)));
-                        }
-                      : null,
-                  customBorder: const CircleBorder(),
-                  child: const SizedBox(
-                    width: 46,
-                    height: 46,
-                    child: Icon(
-                      Icons.add_rounded,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (subtitle != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              subtitle!,
-              style: GoogleFonts.nunito(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF94A3B8),
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -787,97 +365,105 @@ class KaderChildSelectorTile extends StatelessWidget {
   final String? subtitle;
   final VoidCallback onSelectChild;
 
+  /// true bila belum ada anak yang dipilih (tampil ikon orang, bukan inisial).
+  final bool placeholder;
+
   const KaderChildSelectorTile({
     super.key,
     required this.childName,
     this.subtitle,
     required this.onSelectChild,
+    this.placeholder = false,
   });
+
+  bool get _isPlaceholder => placeholder;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0xFFEFF6FF),
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        onTap: onSelectChild,
-        borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFFEDD5), // warm pastel orange
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.child_care_rounded,
-                  color: Color(0xFFEA580C),
-                  size: 26,
-                ),
+    final scheme = Theme.of(context).colorScheme;
+    final actionLabel = _isPlaceholder ? 'Pilih' : 'Ganti';
+
+    return Semantics(
+      button: true,
+      excludeSemantics: true,
+      label: _isPlaceholder
+          ? 'Belum ada anak dipilih. Pilih anak'
+          : '$childName${subtitle == null ? '' : ', $subtitle'}. Ganti anak',
+      onTap: onSelectChild,
+      child: Material(
+        color: AppColors.surface,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppRadius.controlAll,
+          side: const BorderSide(color: AppColors.divider),
+        ),
+        child: InkWell(
+          onTap: onSelectChild,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 64),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpace.lg,
+                vertical: AppSpace.sm + 2,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      childName,
-                      style: GoogleFonts.fredoka(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF0F172A),
+              child: Row(
+                children: [
+                  if (_isPlaceholder)
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: scheme.primaryContainer,
+                        shape: BoxShape.circle,
                       ),
-                    ),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle!,
-                        style: GoogleFonts.nunito(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF64748B),
+                      child: Icon(
+                        Icons.person_search_outlined,
+                        color: scheme.primary,
+                        size: 26,
+                      ),
+                    )
+                  else
+                    InitialsAvatar(name: childName, size: 44),
+                  const SizedBox(width: AppSpace.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _isPlaceholder ? 'Belum ada anak dipilih' : childName,
+                          style: AppText.subtitle.copyWith(
+                            color: _isPlaceholder
+                                ? AppColors.secondaryText
+                                : AppColors.text,
+                          ),
                         ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Pilih',
-                      style: GoogleFonts.nunito(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: const Color(0xFF1D4ED8),
-                      ),
+                        if (subtitle != null && !_isPlaceholder) ...[
+                          const SizedBox(height: 2),
+                          Text(subtitle!, style: AppText.caption),
+                        ],
+                      ],
                     ),
-                    const SizedBox(width: 4),
-                    const Icon(
-                      Icons.expand_more_rounded,
-                      size: 16,
-                      color: Color(0xFF1D4ED8),
+                  ),
+                  const SizedBox(width: AppSpace.sm),
+                  Text(
+                    actionLabel,
+                    style: AppText.caption.copyWith(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w800,
                     ),
-                  ],
-                ),
+                  ),
+                  Icon(
+                    Icons.expand_more_rounded,
+                    size: 20,
+                    color: scheme.primary,
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 }
-

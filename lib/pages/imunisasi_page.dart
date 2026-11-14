@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/anak.dart';
 import '../models/imunisasi.dart';
+import '../utils/app_copy.dart';
+import '../widgets/app_components.dart';
+import '../widgets/app_dialogs.dart';
 import '../widgets/app_theme.dart';
+import '../widgets/child_picker.dart';
+import '../widgets/design_tokens.dart';
 import '../widgets/kader_widgets.dart';
+import 'data_anak_page.dart';
 import 'home_kader_page.dart';
 import 'jadwal_page.dart';
 import 'profil_page.dart';
-
 
 class ImunisasiPage extends StatefulWidget {
   final bool openFormOnStart;
@@ -23,54 +27,90 @@ class ImunisasiPage extends StatefulWidget {
 class _ImunisasiPageState extends State<ImunisasiPage> {
   List<Anak> dataAnak = [];
   List<Imunisasi> dataImunisasi = [];
+
   bool isLoading = true;
+  bool _loadFailed = false;
   bool _autoFormShown = false;
   String _searchQuery = '';
+
+  static const _belumAdaAnak =
+      'Belum ada data anak. Tambahkan anak lebih dulu di menu Anak.';
 
   @override
   void initState() {
     super.initState();
+
     loadData().then((_) {
       if (!widget.openFormOnStart || _autoFormShown || !mounted) return;
+
       _autoFormShown = true;
+
       if (dataAnak.isNotEmpty) {
         tampilkanForm();
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Data anak belum tersedia.')),
-        );
+        _showSnack(_belumAdaAnak);
       }
     });
   }
 
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
   Future<void> loadData() async {
+    setState(() {
+      isLoading = true;
+      _loadFailed = false;
+    });
+
     try {
       final supabase = Supabase.instance.client;
+
       final dataAnakRows = await supabase.from('anak').select().order('nama');
+
       final dataImunisasiRows = await supabase
           .from('imunisasi')
           .select()
           .order('tanggal', ascending: false);
 
       final anakList = dataAnakRows.map((item) => Anak.fromMap(item)).toList();
+
       final imunisasiList = dataImunisasiRows
           .map((item) => Imunisasi.fromMap(item))
           .toList();
 
       if (!mounted) return;
+
       setState(() {
         dataAnak = anakList;
         dataImunisasi = imunisasiList;
-        isLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        isLoading = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal mengambil data: $e')),
-      );
+
+      setState(() => _loadFailed = true);
+
+      // Bila belum ada data, layar menampilkan ErrorState dengan "Coba lagi".
+      // Bila sudah ada data lama di layar, cukup beri tahu lewat snackbar.
+      if (dataImunisasi.isNotEmpty) {
+        _showSnack(
+          friendlyError(
+            e,
+            fallback:
+                'Data belum bisa diperbarui. Tarik layar ke bawah untuk mencoba lagi.',
+          ),
+        );
+      } else {
+        logError(e, 'muat imunisasi');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
   }
 
@@ -84,575 +124,93 @@ class _ImunisasiPageState extends State<ImunisasiPage> {
 
   String namaAnak(Object anakId) {
     final anak = getChild(anakId);
+
     return anak != null ? anak.nama : 'Anak tidak ditemukan';
   }
 
-  void tampilkanForm({Imunisasi? imunisasi}) {
+  String _tanggalTampil(String iso) {
+    final date = DateTime.tryParse(iso);
+    return date == null ? iso : tanggalLengkap(date);
+  }
+
+  // ---------------------------------------------------------------------------
+  // FORM TAMBAH / UBAH
+  // ---------------------------------------------------------------------------
+  Future<void> tampilkanForm({Imunisasi? imunisasi}) async {
     if (dataAnak.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Data anak belum tersedia.')),
-      );
+      _showSnack(_belumAdaAnak);
       return;
     }
 
-    Object selectedAnakId = imunisasi?.anakId ?? dataAnak.first.id!;
-
-    DateTime selectedDate;
-    if (imunisasi != null && imunisasi.tanggal.isNotEmpty) {
-      selectedDate = DateTime.tryParse(imunisasi.tanggal) ?? DateTime.now();
-    } else {
-      selectedDate = DateTime.now();
-    }
-
-    const vaccineChips = [
-      'HB-0',
-      'BCG',
-      'Polio',
-      'DPT-HB-Hib',
-      'Campak',
-      'Vitamin A',
-      'PCV',
-      'Rotavirus',
-    ];
-
-    String selectedVaksin = imunisasi?.namaVaksin ?? 'BCG';
-    final customVaksinController = TextEditingController(
-      text: vaccineChips.contains(selectedVaksin) ? '' : selectedVaksin,
-    );
-
-    final keteranganController = TextEditingController(
-      text: imunisasi?.keterangan ?? '',
-    );
-
-    bool isSaving = false;
-
-    showModalBottomSheet(
+    final message = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            final activeChild = getChild(selectedAnakId);
-            final childName = activeChild != null ? activeChild.nama : 'Pilih Anak';
-            final childSub = activeChild != null
-                ? 'NIK: ${activeChild.nik.isNotEmpty ? activeChild.nik : '-'}'
-                : 'Ketuk untuk memilih';
-
-            return Container(
-              height: MediaQuery.of(context).size.height * 0.92,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-              ),
-              child: Column(
-                children: [
-                  // Handle bar
-                  Center(
-                    child: Container(
-                      width: 44,
-                      height: 5,
-                      margin: const EdgeInsets.only(top: 12, bottom: 8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFCBD5E1),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  ),
-
-                  // Header matching Image 4
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(
-                            Icons.chevron_left_rounded,
-                            size: 28,
-                            color: Color(0xFF0F172A),
-                          ),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                imunisasi == null ? 'Input Imunisasi' : 'Ubah Imunisasi',
-                                style: GoogleFonts.fredoka(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w600,
-                                  color: const Color(0xFF0F172A),
-                                ),
-                              ),
-                              Text(
-                                'Catat vaksin & vitamin',
-                                style: GoogleFonts.nunito(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: const Color(0xFF64748B),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFF1F5F9),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF64748B)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
-
-                  // Form content
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Section: Pilih Anak
-                          Text(
-                            'PILIH ANAK',
-                            style: GoogleFonts.nunito(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.8,
-                              color: const Color(0xFF64748B),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          KaderChildSelectorTile(
-                            childName: childName,
-                            subtitle: childSub,
-                            onSelectChild: () async {
-                              final picked = await showDialog<Object>(
-                                context: context,
-                                builder: (dlgCtx) => AlertDialog(
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  title: Text(
-                                    'Pilih Anak',
-                                    style: GoogleFonts.fredoka(fontWeight: FontWeight.w600),
-                                  ),
-                                  content: SizedBox(
-                                    width: double.maxFinite,
-                                    height: 300,
-                                    child: ListView.separated(
-                                      shrinkWrap: true,
-                                      itemCount: dataAnak.length,
-                                      separatorBuilder: (_, _) => const Divider(height: 1),
-                                      itemBuilder: (_, idx) {
-                                        final child = dataAnak[idx];
-                                        final isSel = child.id == selectedAnakId;
-                                        return ListTile(
-                                          leading: CircleAvatar(
-                                            backgroundColor: isSel
-                                                ? const Color(0xFF1D4ED8)
-                                                : const Color(0xFFEFF6FF),
-                                            child: Icon(
-                                              Icons.child_care_rounded,
-                                              color: isSel ? Colors.white : const Color(0xFF1D4ED8),
-                                            ),
-                                          ),
-                                          title: Text(
-                                            child.nama,
-                                            style: GoogleFonts.nunito(
-                                              fontWeight: isSel ? FontWeight.w800 : FontWeight.w600,
-                                              color: isSel ? const Color(0xFF1D4ED8) : const Color(0xFF0F172A),
-                                            ),
-                                          ),
-                                          subtitle: Text(
-                                            'NIK: ${child.nik.isNotEmpty ? child.nik : '-'}',
-                                            style: GoogleFonts.nunito(fontSize: 12),
-                                          ),
-                                          trailing: isSel
-                                              ? const Icon(Icons.check_circle, color: Color(0xFF1D4ED8))
-                                              : null,
-                                          onTap: () => Navigator.pop(dlgCtx, child.id),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                ),
-                              );
-                              if (picked != null) {
-                                setModalState(() {
-                                  selectedAnakId = picked;
-                                });
-                              }
-                            },
-                          ),
-
-                          const SizedBox(height: 20),
-
-                          // Section: Jenis Imunisasi (Image 4 chips)
-                          Text(
-                            'JENIS IMUNISASI',
-                            style: GoogleFonts.nunito(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.8,
-                              color: const Color(0xFF64748B),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: vaccineChips.map((vaksin) {
-                              final isSel = selectedVaksin == vaksin;
-                              return ChoiceChip(
-                                label: Text(vaksin),
-                                selected: isSel,
-                                selectedColor: const Color(0xFF1D4ED8),
-                                backgroundColor: const Color(0xFFEFF6FF),
-                                labelStyle: GoogleFonts.nunito(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: isSel ? Colors.white : const Color(0xFF1D4ED8),
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  side: BorderSide(
-                                    color: isSel ? const Color(0xFF1D4ED8) : Colors.transparent,
-                                  ),
-                                ),
-                                onSelected: (selected) {
-                                  setModalState(() {
-                                    if (selected) {
-                                      selectedVaksin = vaksin;
-                                      customVaksinController.text = '';
-                                    }
-                                  });
-                                },
-                              );
-                            }).toList(),
-                          ),
-
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: customVaksinController,
-                            onChanged: (val) {
-                              if (val.trim().isNotEmpty) {
-                                setModalState(() {
-                                  selectedVaksin = val.trim();
-                                });
-                              }
-                            },
-                            decoration: InputDecoration(
-                              hintText: 'Atau ketik jenis vaksin lain...',
-                              hintStyle: GoogleFonts.nunito(
-                                color: const Color(0xFF94A3B8),
-                                fontSize: 13,
-                              ),
-                              prefixIcon: const Icon(Icons.vaccines_outlined, color: Color(0xFF64748B)),
-                              filled: true,
-                              fillColor: const Color(0xFFF8FAFC),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: const BorderSide(color: Color(0xFF1D4ED8), width: 1.5),
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 20),
-
-                          // Section: Tanggal Pemberian
-                          Text(
-                            'TANGGAL PEMBERIAN',
-                            style: GoogleFonts.nunito(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.8,
-                              color: const Color(0xFF64748B),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Material(
-                            color: const Color(0xFFEFF6FF),
-                            borderRadius: BorderRadius.circular(16),
-                            child: InkWell(
-                              onTap: () async {
-                                final now = DateTime.now();
-                                final picked = await showDatePicker(
-                                  context: context,
-                                  initialDate: selectedDate,
-                                  firstDate: DateTime(1900),
-                                  lastDate: DateTime(now.year + 5),
-                                );
-                                if (picked != null) {
-                                  setModalState(() {
-                                    selectedDate = picked;
-                                  });
-                                }
-                              },
-                              borderRadius: BorderRadius.circular(16),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                child: Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.calendar_today_rounded,
-                                      color: Color(0xFF1D4ED8),
-                                      size: 20,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Text(
-                                      '${selectedDate.day.toString().padLeft(2, '0')}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.year}',
-                                      style: GoogleFonts.fredoka(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w500,
-                                        color: const Color(0xFF0F172A),
-                                      ),
-                                    ),
-                                    const Spacer(),
-                                    Text(
-                                      'Ubah',
-                                      style: GoogleFonts.nunito(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w800,
-                                        color: const Color(0xFF1D4ED8),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 20),
-
-                          // Section: Catatan (Opsional)
-                          Text(
-                            'CATATAN (OPSIONAL)',
-                            style: GoogleFonts.nunito(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.8,
-                              color: const Color(0xFF64748B),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: keteranganController,
-                            maxLines: 3,
-                            decoration: InputDecoration(
-                              hintText: 'Reaksi, dosis, dll.',
-                              hintStyle: GoogleFonts.nunito(
-                                color: const Color(0xFF94A3B8),
-                                fontSize: 13,
-                              ),
-                              prefixIcon: const Padding(
-                                padding: EdgeInsets.only(bottom: 40),
-                                child: Icon(Icons.notes_rounded, color: Color(0xFF64748B)),
-                              ),
-                              filled: true,
-                              fillColor: const Color(0xFFF8FAFC),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: const BorderSide(color: Color(0xFF1D4ED8), width: 1.5),
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 24),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // Bottom Save Button
-                  SafeArea(
-                    top: false,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-                      child: SizedBox(
-                        width: double.infinity,
-                        height: 52,
-                        child: FilledButton(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFF1D4ED8),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                          onPressed: isSaving
-                              ? null
-                              : () async {
-                                  final vaccineName = customVaksinController.text.trim().isNotEmpty
-                                      ? customVaksinController.text.trim()
-                                      : selectedVaksin;
-
-                                  if (vaccineName.isEmpty) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Pilih atau ketik jenis vaksin.')),
-                                    );
-                                    return;
-                                  }
-
-                                  setModalState(() => isSaving = true);
-
-                                  final formattedDate =
-                                      '${selectedDate.year.toString().padLeft(4, '0')}-'
-                                      '${selectedDate.month.toString().padLeft(2, '0')}-'
-                                      '${selectedDate.day.toString().padLeft(2, '0')}';
-
-                                  final data = Imunisasi(
-                                    id: imunisasi?.id,
-                                    anakId: selectedAnakId,
-                                    namaVaksin: vaccineName,
-                                    tanggal: formattedDate,
-                                    keterangan: keteranganController.text.trim(),
-                                  );
-
-                                  try {
-                                    final supabase = Supabase.instance.client;
-                                    if (imunisasi == null) {
-                                      await supabase.from('imunisasi').insert(data.toMap());
-                                    } else {
-                                      await supabase
-                                          .from('imunisasi')
-                                          .update(data.toMap())
-                                          .eq('id', imunisasi.id!);
-                                    }
-                                    if (!context.mounted) return;
-                                    Navigator.pop(context);
-                                    await loadData();
-                                  } catch (error) {
-                                    if (!context.mounted) return;
-                                    setModalState(() => isSaving = false);
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('Gagal menyimpan imunisasi: $error'),
-                                        backgroundColor: Colors.red,
-                                      ),
-                                    );
-                                  }
-                                },
-                          child: isSaving
-                              ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2.5,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : Text(
-                                  imunisasi == null ? 'Simpan imunisasi' : 'Simpan perubahan',
-                                  style: GoogleFonts.fredoka(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
+      useSafeArea: true,
+      builder: (_) => Theme(
+        data: AppTheme.kader,
+        child: _ImunisasiFormSheet(children: dataAnak, imunisasi: imunisasi),
+      ),
     );
+
+    if (!mounted || message == null) return;
+
+    _showSnack(message);
+    await loadData();
   }
 
-  void hapusData(Imunisasi imunisasi) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text(
-            'Hapus Imunisasi',
-            style: GoogleFonts.fredoka(fontWeight: FontWeight.w600),
-          ),
-          content: Text(
-            'Apakah kamu yakin ingin menghapus data imunisasi ${imunisasi.namaVaksin} untuk ${namaAnak(imunisasi.anakId)}?',
-            style: GoogleFonts.nunito(),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                'Batal',
-                style: GoogleFonts.nunito(fontWeight: FontWeight.w700),
-              ),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: const Color(0xFFEF4444)),
-              onPressed: () async {
-                try {
-                  await Supabase.instance.client
-                      .from('imunisasi')
-                      .delete()
-                      .eq('id', imunisasi.id!);
-                  if (!context.mounted) return;
-                  Navigator.pop(context);
-                  await loadData();
-                } catch (error) {
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Gagal menghapus data: $error'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              },
-              child: Text(
-                'Hapus',
-                style: GoogleFonts.nunito(fontWeight: FontWeight.w700),
-              ),
-            ),
-          ],
-        );
-      },
+  // ---------------------------------------------------------------------------
+  // HAPUS
+  // ---------------------------------------------------------------------------
+  Future<void> hapusData(Imunisasi imunisasi) async {
+    final nama = namaAnak(imunisasi.anakId);
+
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Hapus catatan imunisasi?',
+      message:
+          'Imunisasi ${imunisasi.namaVaksin} untuk $nama tanggal ${_tanggalTampil(imunisasi.tanggal)} akan dihapus dan tidak bisa dikembalikan.',
+      confirmLabel: 'Hapus',
+      destructive: true,
     );
+    if (!confirmed || !mounted) return;
+
+    try {
+      await Supabase.instance.client
+          .from('imunisasi')
+          .delete()
+          .eq('id', imunisasi.id!);
+
+      if (!mounted) return;
+
+      _showSnack('Imunisasi ${imunisasi.namaVaksin} untuk $nama dihapus.');
+      await loadData();
+    } catch (error) {
+      if (!mounted) return;
+
+      _showSnack(
+        friendlyError(
+          error,
+          fallback: 'Catatan belum bisa dihapus. Coba lagi.',
+        ),
+      );
+    }
   }
 
+  // ---------------------------------------------------------------------------
+  // NAVIGASI
+  // ---------------------------------------------------------------------------
   void _onNavigationTap(BuildContext context, int index) {
-    // KaderBottomAppBar: 0=Beranda, 1=Anak, [FAB=CatatGizi], 2=Jadwal, 3=Profil
+    // KaderBottomAppBar: 0=Beranda, 1=Anak, [FAB=Imunisasi], 2=Jadwal, 3=Profil
     if (index == -1) return; // center FAB tapped through nav
-    final page = switch (index) {
+
+    final Widget? page = switch (index) {
       0 => const HomeKaderPage(),
-      1 => const JadwalPage(isKader: true),
+      1 => const DataAnakPage(isKader: true),
       2 => const JadwalPage(isKader: true),
       3 => const ProfilPage(),
       _ => null,
     };
+
     if (page != null) {
       Navigator.pushReplacement(
         context,
@@ -661,309 +219,627 @@ class _ImunisasiPageState extends State<ImunisasiPage> {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // BUILD
+  // ---------------------------------------------------------------------------
+  Widget _buildBody(List<Imunisasi> filtered) {
+    if (isLoading && dataImunisasi.isEmpty && !_loadFailed) {
+      return const LoadingState(message: 'Memuat catatan imunisasi');
+    }
+
+    if (_loadFailed && dataImunisasi.isEmpty) {
+      return ErrorState(onRetry: loadData);
+    }
+
+    if (dataImunisasi.isEmpty) {
+      return EmptyState(
+        icon: Icons.vaccines_outlined,
+        title: 'Belum ada catatan imunisasi',
+        message: 'Catat vaksin dan vitamin yang sudah diberikan kepada anak.',
+        actionLabel: 'Catat imunisasi',
+        onAction: () => tampilkanForm(),
+      );
+    }
+
+    if (filtered.isEmpty) {
+      return EmptyState(
+        icon: Icons.search_off_rounded,
+        title: 'Tidak ada hasil',
+        message: 'Tidak ada catatan yang cocok dengan "$_searchQuery".',
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: loadData,
+      child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpace.page,
+          AppSpace.sm,
+          AppSpace.page,
+          AppSpace.xl,
+        ),
+        itemCount: filtered.length,
+        separatorBuilder: (_, _) => const SizedBox(height: AppSpace.md),
+        itemBuilder: (context, index) {
+          final item = filtered[index];
+
+          return _RecordCard(
+            vaccine: item.namaVaksin,
+            childName: namaAnak(item.anakId),
+            dateText: _tanggalTampil(item.tanggal),
+            note: item.keterangan,
+            onEdit: () => tampilkanForm(imunisasi: item),
+            onDelete: () => hapusData(item),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final filteredList = dataImunisasi.where((item) {
       if (_searchQuery.isEmpty) return true;
+
       final childName = namaAnak(item.anakId).toLowerCase();
       final vaccine = item.namaVaksin.toLowerCase();
       final note = item.keterangan.toLowerCase();
       final q = _searchQuery.toLowerCase();
+
       return childName.contains(q) || vaccine.contains(q) || note.contains(q);
     }).toList();
+
+    final total = dataImunisasi.length;
 
     return Theme(
       data: AppTheme.kader,
       child: Scaffold(
-        backgroundColor: Colors.white,
         body: SafeArea(
           child: Column(
             children: [
-              // Header
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpace.sm,
+                  AppSpace.md,
+                  AppSpace.page,
+                  AppSpace.sm,
+                ),
                 child: KaderTopBar(
-                  title: 'Input Imunisasi',
-                  subtitle: 'Catat vaksin & vitamin anak',
+                  title: 'Catat Imunisasi',
+                  subtitle: 'Vaksin & vitamin anak',
                   onBack: () => Navigator.maybePop(context),
-                  trailing: Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: IconButton(
-                      icon: const Icon(
-                        Icons.add_rounded,
-                        color: Color(0xFF1D4ED8),
-                        size: 24,
-                      ),
-                      tooltip: 'Tambah Imunisasi',
-                      onPressed: () => tampilkanForm(),
-                    ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpace.page),
+                child: AppSearchField(
+                  hint: 'Cari nama anak atau jenis vaksin',
+                  onChanged: (value) => setState(() => _searchQuery = value),
+                ),
+              ),
+              if (total > 0) ...[
+                const SizedBox(height: AppSpace.sm),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpace.page,
+                  ),
+                  child: KaderInfoPill(
+                    icon: Icons.vaccines_outlined,
+                    message: _searchQuery.isEmpty
+                        ? '$total catatan imunisasi'
+                        : '${filteredList.length} dari $total catatan',
                   ),
                 ),
-              ),
-
-              // Search Bar
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: KaderSearchBar(
-                  hintText: 'Cari nama anak atau jenis vaksin...',
-                  onTap: () async {
-                    final query = await showDialog<String>(
-                      context: context,
-                      builder: (ctx) {
-                        final c = TextEditingController(text: _searchQuery);
-                        return AlertDialog(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          title: Text(
-                            'Cari Data Imunisasi',
-                            style: GoogleFonts.fredoka(fontWeight: FontWeight.w600),
-                          ),
-                          content: TextField(
-                            controller: c,
-                            autofocus: true,
-                            decoration: const InputDecoration(
-                              hintText: 'Ketik nama anak atau vaksin...',
-                              prefixIcon: Icon(Icons.search_rounded),
-                            ),
-                          ),
-                          actions: [
-                            if (_searchQuery.isNotEmpty)
-                              TextButton(
-                                onPressed: () => Navigator.pop(ctx, ''),
-                                child: const Text('Reset'),
-                              ),
-                            TextButton(
-                              onPressed: () => Navigator.pop(ctx, c.text),
-                              child: const Text('Terapkan'),
-                            ),
-                          ],
-                        );
-                      },
-                    );
-                    if (query != null) {
-                      setState(() {
-                        _searchQuery = query;
-                      });
-                    }
-                  },
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              // Total count info pill
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: KaderInfoPill(
-                  icon: Icons.vaccines_outlined,
-                  message: '${dataImunisasi.length} total riwayat imunisasi tercatat',
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              // List of records
-              Expanded(
-                child: isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : filteredList.isEmpty
-                        ? Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(24.0),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    width: 68,
-                                    height: 68,
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFFEFF6FF),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.vaccines_outlined,
-                                      color: Color(0xFF1D4ED8),
-                                      size: 32,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 14),
-                                  Text(
-                                    _searchQuery.isNotEmpty
-                                        ? 'Tidak ada data cocok "$_searchQuery"'
-                                        : 'Belum ada data imunisasi',
-                                    style: GoogleFonts.fredoka(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                      color: const Color(0xFF0F172A),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    'Ketuk tombol + untuk mulai mencatat vaksinasi balita',
-                                    textAlign: TextAlign.center,
-                                    style: GoogleFonts.nunito(
-                                      fontSize: 13,
-                                      color: const Color(0xFF64748B),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          )
-                        : ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(20, 4, 20, 80),
-                            itemCount: filteredList.length,
-                            separatorBuilder: (_, i) => const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 4),
-                              child: KaderDashedDivider(),
-                            ),
-                            itemBuilder: (context, index) {
-                              final item = filteredList[index];
-                              final cName = namaAnak(item.anakId);
-
-                              return Container(
-                                padding: const EdgeInsets.symmetric(vertical: 10),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    // Syringe/Vaccine icon badge
-                                    Container(
-                                      width: 44,
-                                      height: 44,
-                                      decoration: const BoxDecoration(
-                                        color: Color(0xFFEFF6FF),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        Icons.vaccines_rounded,
-                                        color: Color(0xFF1D4ED8),
-                                        size: 24,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-
-                                    // Details
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              Expanded(
-                                                child: Text(
-                                                  item.namaVaksin,
-                                                  style: GoogleFonts.fredoka(
-                                                    fontSize: 16,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: const Color(0xFF0F172A),
-                                                  ),
-                                                ),
-                                              ),
-                                              // Date badge
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFFEFF6FF),
-                                                  borderRadius: BorderRadius.circular(8),
-                                                ),
-                                                child: Text(
-                                                  item.tanggal,
-                                                  style: GoogleFonts.nunito(
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.w700,
-                                                    color: const Color(0xFF1D4ED8),
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 4),
-
-                                          // Child name tag
-                                          Row(
-                                            children: [
-                                              const Icon(
-                                                Icons.child_care_rounded,
-                                                size: 14,
-                                                color: Color(0xFF64748B),
-                                              ),
-                                              const SizedBox(width: 4),
-                                              Expanded(
-                                                child: Text(
-                                                  cName,
-                                                  style: GoogleFonts.nunito(
-                                                    fontSize: 13,
-                                                    fontWeight: FontWeight.w700,
-                                                    color: const Color(0xFF334155),
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-
-                                          if (item.keterangan.isNotEmpty) ...[
-                                            const SizedBox(height: 6),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFF1F5F9),
-                                                borderRadius: BorderRadius.circular(6),
-                                              ),
-                                              child: Text(
-                                                item.keterangan,
-                                                style: GoogleFonts.nunito(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: const Color(0xFF475569),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-
-                                    // Action buttons
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.edit_outlined,
-                                        size: 18,
-                                        color: Color(0xFF64748B),
-                                      ),
-                                      onPressed: () => tampilkanForm(imunisasi: item),
-                                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                      padding: EdgeInsets.zero,
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.delete_outline_rounded,
-                                        size: 18,
-                                        color: Color(0xFFEF4444),
-                                      ),
-                                      onPressed: () => hapusData(item),
-                                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                      padding: EdgeInsets.zero,
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-              ),
+              ],
+              const SizedBox(height: AppSpace.sm),
+              Expanded(child: _buildBody(filteredList)),
             ],
           ),
         ),
         floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
         floatingActionButton: KaderCenterFab(
+          tooltip: 'Catat imunisasi',
           onPressed: () => tampilkanForm(),
         ),
         bottomNavigationBar: KaderBottomAppBar(
           selectedIndex: -1,
+          centerLabel: 'Imunisasi',
           onTabSelected: (index) => _onNavigationTap(context, index),
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// KARTU RIWAYAT
+// =============================================================================
+class _RecordCard extends StatelessWidget {
+  final String vaccine;
+  final String childName;
+  final String dateText;
+  final String note;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _RecordCard({
+    required this.vaccine,
+    required this.childName,
+    required this.dateText,
+    required this.note,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpace.lg,
+        AppSpace.md,
+        AppSpace.xs,
+        AppSpace.lg,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: scheme.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.vaccines_rounded,
+                  size: 24,
+                  color: scheme.primary,
+                ),
+              ),
+              const SizedBox(width: AppSpace.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(vaccine, style: AppText.subtitle),
+                    Text(dateText, style: AppText.caption),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Ubah imunisasi $vaccine untuk $childName',
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit_outlined),
+              ),
+              IconButton(
+                tooltip: 'Hapus imunisasi $vaccine untuk $childName',
+                onPressed: onDelete,
+                icon: Icon(
+                  Icons.delete_outline_rounded,
+                  color: AppStatus.danger.foreground,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpace.md),
+          Padding(
+            padding: const EdgeInsets.only(right: AppSpace.md),
+            child: Row(
+              children: [
+                InitialsAvatar(name: childName, size: 28),
+                const SizedBox(width: AppSpace.sm),
+                Expanded(child: Text(childName, style: AppText.label)),
+              ],
+            ),
+          ),
+          if (note.isNotEmpty) ...[
+            const SizedBox(height: AppSpace.sm),
+            Padding(
+              padding: const EdgeInsets.only(right: AppSpace.md),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.notes_rounded,
+                    size: 18,
+                    color: AppColors.secondaryText,
+                  ),
+                  const SizedBox(width: AppSpace.sm),
+                  Expanded(child: Text(note, style: AppText.body)),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// LEMBAR FORM
+// =============================================================================
+class _ImunisasiFormSheet extends StatefulWidget {
+  final List<Anak> children;
+  final Imunisasi? imunisasi;
+
+  const _ImunisasiFormSheet({required this.children, required this.imunisasi});
+
+  @override
+  State<_ImunisasiFormSheet> createState() => _ImunisasiFormSheetState();
+}
+
+class _ImunisasiFormSheetState extends State<_ImunisasiFormSheet> {
+  static const _vaccineChips = [
+    'HB-0',
+    'BCG',
+    'Polio',
+    'DPT-HB-Hib',
+    'Campak',
+    'Vitamin A',
+    'PCV',
+    'Rotavirus',
+  ];
+
+  late final TextEditingController _customCtrl;
+  late final TextEditingController _noteCtrl;
+
+  Object? _selectedAnakId;
+  late DateTime _selectedDate;
+  String _selectedChip = '';
+
+  bool _isSaving = false;
+  String? _childError;
+  String? _vaccineError;
+  String? _errorMessage;
+
+  bool get _isEdit => widget.imunisasi != null;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final i = widget.imunisasi;
+
+    // Catatan baru: anak TIDAK dipilih otomatis (kecuali hanya ada satu),
+    // dan jenis vaksin TIDAK terisi bawaan (sebelumnya "BCG").
+    if (i != null) {
+      _selectedAnakId = i.anakId;
+    } else if (widget.children.length == 1) {
+      _selectedAnakId = widget.children.first.id;
+    }
+
+    _selectedDate = (i != null && i.tanggal.isNotEmpty)
+        ? (DateTime.tryParse(i.tanggal) ?? DateTime.now())
+        : DateTime.now();
+
+    var custom = '';
+    if (i != null && i.namaVaksin.isNotEmpty) {
+      if (_vaccineChips.contains(i.namaVaksin)) {
+        _selectedChip = i.namaVaksin;
+      } else {
+        custom = i.namaVaksin;
+      }
+    }
+
+    _customCtrl = TextEditingController(text: custom);
+    _noteCtrl = TextEditingController(text: i?.keterangan ?? '');
+  }
+
+  @override
+  void dispose() {
+    _customCtrl.dispose();
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  Anak? get _child {
+    if (_selectedAnakId == null) return null;
+    for (final a in widget.children) {
+      if (a.id == _selectedAnakId) return a;
+    }
+    return null;
+  }
+
+  bool get _dateIsFuture => DateUtils.dateOnly(
+    _selectedDate,
+  ).isAfter(DateUtils.dateOnly(DateTime.now()));
+
+  Future<void> _pickChild() async {
+    final id = await showChildPicker(
+      context,
+      children: widget.children
+          .map((a) => {'id': a.id, 'nama': a.nama, 'nik': a.nik})
+          .toList(),
+      selectedId: _selectedAnakId?.toString(),
+    );
+
+    if (id == null || !mounted) return;
+
+    for (final a in widget.children) {
+      if (a.id.toString() == id) {
+        setState(() {
+          _selectedAnakId = a.id;
+          _childError = null;
+        });
+        break;
+      }
+    }
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(1900),
+      lastDate: DateTime(now.year + 5),
+    );
+
+    if (picked != null && mounted) {
+      setState(() => _selectedDate = picked);
+    }
+  }
+
+  Future<void> _save() async {
+    FocusScope.of(context).unfocus();
+
+    final vaccineName = _customCtrl.text.trim().isNotEmpty
+        ? _customCtrl.text.trim()
+        : _selectedChip;
+
+    final child = _child;
+
+    setState(() {
+      _errorMessage = null;
+      _childError = child == null ? 'Pilih anak terlebih dahulu.' : null;
+      _vaccineError = vaccineName.isEmpty
+          ? 'Pilih atau ketik jenis vaksin.'
+          : null;
+    });
+
+    if (child == null || vaccineName.isEmpty) return;
+
+    setState(() => _isSaving = true);
+
+    final formattedDate =
+        '${_selectedDate.year.toString().padLeft(4, '0')}-'
+        '${_selectedDate.month.toString().padLeft(2, '0')}-'
+        '${_selectedDate.day.toString().padLeft(2, '0')}';
+
+    final data = Imunisasi(
+      id: widget.imunisasi?.id,
+      anakId: _selectedAnakId!,
+      namaVaksin: vaccineName,
+      tanggal: formattedDate,
+      keterangan: _noteCtrl.text.trim(),
+    );
+
+    try {
+      final supabase = Supabase.instance.client;
+
+      if (widget.imunisasi == null) {
+        await supabase.from('imunisasi').insert(data.toMap());
+      } else {
+        await supabase
+            .from('imunisasi')
+            .update(data.toMap())
+            .eq('id', widget.imunisasi!.id!);
+      }
+
+      if (!mounted) return;
+
+      Navigator.pop(
+        context,
+        _isEdit
+            ? 'Perubahan imunisasi $vaccineName untuk ${child.nama} disimpan.'
+            : 'Imunisasi $vaccineName untuk ${child.nama} disimpan.',
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _isSaving = false;
+        _errorMessage = friendlyError(
+          error,
+          fallback:
+              'Imunisasi belum tersimpan. Periksa koneksi internet, lalu coba lagi.',
+        );
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final inset = MediaQuery.viewInsetsOf(context).bottom;
+    final height = MediaQuery.sizeOf(context).height;
+    final child = _child;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: inset),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: height * 0.92),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Kepala
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpace.page,
+                0,
+                AppSpace.sm,
+                AppSpace.sm,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Semantics(
+                          header: true,
+                          child: Text(
+                            _isEdit ? 'Ubah imunisasi' : 'Catat imunisasi',
+                            style: AppText.title,
+                          ),
+                        ),
+                        Text('Vaksin dan vitamin anak.', style: AppText.caption),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Tutup',
+                    onPressed: _isSaving ? null : () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+            ),
+
+            // Isi
+            Flexible(
+              child: SingleChildScrollView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpace.page,
+                  AppSpace.sm,
+                  AppSpace.page,
+                  AppSpace.lg,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Anak', style: AppText.label),
+                    const SizedBox(height: 6),
+                    KaderChildSelectorTile(
+                      childName: child?.nama ?? '',
+                      placeholder: child == null,
+                      subtitle: child == null
+                          ? null
+                          : 'NIK: ${child.nik.isNotEmpty ? child.nik : '-'}',
+                      onSelectChild: _pickChild,
+                    ),
+                    if (_childError != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        _childError!,
+                        style: AppText.caption.copyWith(
+                          color: AppStatus.danger.foreground,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: AppSpace.lg),
+
+                    Text('Jenis imunisasi', style: AppText.label),
+                    const SizedBox(height: AppSpace.sm),
+                    ChoiceChipGroup(
+                      options: _vaccineChips,
+                      selected: _selectedChip,
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedChip = value;
+                          if (value.isNotEmpty) _customCtrl.clear();
+                          _vaccineError = null;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: AppSpace.md),
+                    AppTextField(
+                      label: 'Jenis lain',
+                      controller: _customCtrl,
+                      hint: 'Ketik jika tidak ada di pilihan di atas',
+                      prefixIcon: Icons.vaccines_outlined,
+                      textCapitalization: TextCapitalization.sentences,
+                      textInputAction: TextInputAction.next,
+                      onChanged: (value) {
+                        if (value.trim().isNotEmpty) {
+                          setState(() {
+                            _selectedChip = '';
+                            _vaccineError = null;
+                          });
+                        }
+                      },
+                    ),
+                    if (_vaccineError != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        _vaccineError!,
+                        style: AppText.caption.copyWith(
+                          color: AppStatus.danger.foreground,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: AppSpace.lg),
+
+                    Text('Tanggal pemberian', style: AppText.label),
+                    const SizedBox(height: 6),
+                    AppPickerTile(
+                      icon: Icons.calendar_today_outlined,
+                      value: tanggalLengkap(_selectedDate),
+                      semanticLabel:
+                          'Tanggal pemberian ${tanggalLengkap(_selectedDate)}. Ubah tanggal',
+                      onTap: _pickDate,
+                    ),
+                    if (_dateIsFuture) ...[
+                      const SizedBox(height: AppSpace.sm),
+                      const InlineMessage(
+                        status: AppStatus.warning,
+                        message:
+                            'Tanggal ini belum terjadi. Pastikan vaksin memang diberikan pada tanggal tersebut.',
+                      ),
+                    ],
+                    const SizedBox(height: AppSpace.lg),
+
+                    AppTextField(
+                      label: 'Catatan (opsional)',
+                      controller: _noteCtrl,
+                      hint: 'Reaksi, dosis, dll.',
+                      maxLines: 3,
+                      textCapitalization: TextCapitalization.sentences,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Kaki
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpace.page,
+                AppSpace.sm,
+                AppSpace.page,
+                AppSpace.lg,
+              ),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_errorMessage != null) ...[
+                      InlineMessage(message: _errorMessage!),
+                      const SizedBox(height: AppSpace.md),
+                    ],
+                    AppButton(
+                      label: _isEdit ? 'Simpan perubahan' : 'Simpan imunisasi',
+                      onPressed: _save,
+                      isLoading: _isSaving,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

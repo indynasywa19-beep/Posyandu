@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../utils/app_copy.dart';
+import '../widgets/app_components.dart';
+import '../widgets/app_dialogs.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/app_widgets.dart';
 import '../widgets/design_tokens.dart';
@@ -31,8 +33,10 @@ class RiwayatPage extends StatefulWidget {
 
 class _RiwayatPageState extends State<RiwayatPage> {
   final _supabase = Supabase.instance.client;
+
   List<_HistoryEntry> _entries = [];
   bool _isLoading = true;
+  bool _noChildren = false;
   String? _loadError;
 
   @override
@@ -41,8 +45,12 @@ class _RiwayatPageState extends State<RiwayatPage> {
     _loadHistory();
   }
 
+  // ---------------------------------------------------------------------------
+  // DATA
+  // ---------------------------------------------------------------------------
   Future<void> _loadHistory() async {
     final user = _supabase.auth.currentUser;
+
     if (!widget.isKader && user == null) {
       setState(() {
         _loadError = 'Sesi login tidak ditemukan. Silakan masuk kembali.';
@@ -50,12 +58,15 @@ class _RiwayatPageState extends State<RiwayatPage> {
       });
       return;
     }
+
     setState(() {
       _isLoading = true;
       _loadError = null;
     });
+
     try {
       final List<Map<String, dynamic>> children;
+
       if (widget.isKader) {
         children = await _supabase.from('anak').select('id, nama');
       } else {
@@ -64,134 +75,271 @@ class _RiwayatPageState extends State<RiwayatPage> {
             .select('id, nama')
             .eq('user_id', user!.id);
       }
+
       final childNames = <Object, String>{};
       for (final child in children) {
         final id = child['id'];
         if (id is Object) childNames[id] = child['nama']?.toString() ?? '-';
       }
+
       if (childNames.isEmpty) {
         if (!mounted) return;
         setState(() {
           _entries = [];
+          _noChildren = true;
           _isLoading = false;
         });
         return;
       }
 
       final ids = childNames.keys.toList();
+
       final examinations = await _supabase
           .from('pemeriksaan')
           .select()
           .inFilter('anak_id', ids)
           .order('tanggal', ascending: true);
+
       final vaccinations = await _supabase
           .from('imunisasi')
           .select()
           .inFilter('anak_id', ids)
           .order('tanggal', ascending: true);
 
-      final entries =
-          <_HistoryEntry>[
-            for (final item in examinations)
-              _HistoryEntry(
-                icon: Icons.medical_services_outlined,
-                title: 'Pemeriksaan Gizi',
-                childName:
-                    childNames[item['anak_id']] ?? 'Anak tidak ditemukan',
-                date: item['tanggal']?.toString() ?? '',
-                detail:
-                    'BB: ${item['berat_badan'] ?? '-'} kg • '
-                    'TB: ${item['tinggi_badan'] ?? '-'} cm',
-                note: item['catatan']?.toString() ?? '',
-              ),
-            for (final item in vaccinations)
-              _HistoryEntry(
-                icon: Icons.vaccines_outlined,
-                title: item['nama_vaksin']?.toString() ?? 'Imunisasi',
-                childName:
-                    childNames[item['anak_id']] ?? 'Anak tidak ditemukan',
-                date: item['tanggal']?.toString() ?? '',
-                detail: 'Vaksin ${item['nama_vaksin'] ?? '-'}',
-                note: item['keterangan']?.toString() ?? '',
-                isVaccination: true,
-              ),
-          ]..sort((a, b) {
-            final dateA = DateTime.tryParse(a.date);
-            final dateB = DateTime.tryParse(b.date);
-            if (dateA == null || dateB == null) return a.date.compareTo(b.date);
-            return dateA.compareTo(dateB);
-          });
+      String measure(Object? value, String unit) =>
+          value == null ? '-' : '$value $unit';
+
+      final entries = <_HistoryEntry>[
+        for (final item in examinations)
+          _HistoryEntry(
+            isVaccination: false,
+            childName: childNames[item['anak_id']] ?? 'Anak tidak ditemukan',
+            date: item['tanggal']?.toString() ?? '',
+            detail:
+                'Berat ${measure(item['berat_badan'], 'kg')} · '
+                'Tinggi ${measure(item['tinggi_badan'], 'cm')}',
+            note: item['catatan']?.toString() ?? '',
+          ),
+        for (final item in vaccinations)
+          _HistoryEntry(
+            isVaccination: true,
+            childName: childNames[item['anak_id']] ?? 'Anak tidak ditemukan',
+            date: item['tanggal']?.toString() ?? '',
+            detail: item['nama_vaksin']?.toString() ?? 'Imunisasi',
+            note: item['keterangan']?.toString() ?? '',
+          ),
+      ];
+
+      // Terbaru di atas.
+      entries.sort((a, b) {
+        final dateA = DateTime.tryParse(a.date);
+        final dateB = DateTime.tryParse(b.date);
+        if (dateA == null || dateB == null) return b.date.compareTo(a.date);
+        return dateB.compareTo(dateA);
+      });
+
       if (widget.onlyVaccinations) {
         entries.removeWhere((entry) => !entry.isVaccination);
       }
 
       if (!mounted) return;
+
       setState(() {
         _entries = entries;
+        _noChildren = false;
         _isLoading = false;
       });
     } catch (error) {
       if (!mounted) return;
+
       setState(() {
-        _loadError = 'Gagal memuat riwayat pemeriksaan: $error';
+        _loadError = friendlyError(
+          error,
+          fallback: 'Riwayat belum bisa dimuat. Coba lagi sebentar lagi.',
+        );
         _isLoading = false;
       });
     }
   }
 
-  void _onNavigationTap(BuildContext context, int index) {
-    final page = widget.isKader
-        ? switch (index) {
-            0 => const HomeKaderPage(),
-            1 => const DataAnakPage(isKader: true),
-            2 => const PemeriksaanPage(openFormOnStart: true),
-            3 => const JadwalPage(isKader: true),
-            4 => const ProfilPage(),
-            _ => null,
-          }
-        : switch (index) {
-            0 => const HomeOrtuPage(),
-            1 => const DataAnakPage(),
-            2 => const JadwalPage(),
-            3 => const ArtikelPage(),
-            4 => const ProfilPage(),
-            _ => null,
-          };
-    if (page != null) {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => page));
-    }
-  }
-
+  // ---------------------------------------------------------------------------
+  // KELUAR AKUN
+  // ---------------------------------------------------------------------------
   Future<void> _logout() async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Keluar dari akun?',
+      message: 'Anda perlu masuk lagi untuk membuka SI-POSYANDU.',
+      confirmLabel: 'Keluar',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+
     try {
       await _supabase.auth.signOut();
+
       if (!mounted) return;
+
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const LoginPage()),
         (_) => false,
       );
     } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Gagal keluar dari akun: $error'),
-            backgroundColor: Colors.red.shade700,
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            friendlyError(
+              error,
+              fallback: 'Belum bisa keluar dari akun. Coba lagi.',
+            ),
           ),
-        );
-      }
+        ),
+      );
     }
   }
 
-  Widget _buildKader(BuildContext context) {
-    return Theme(
-      data: AppTheme.kader.copyWith(
-        snackBarTheme: const SnackBarThemeData(
-          behavior: SnackBarBehavior.floating,
+  // ---------------------------------------------------------------------------
+  // NAVIGASI (Orang Tua)
+  // ---------------------------------------------------------------------------
+  void _onParentNavigationTap(BuildContext context, int index) {
+    final Widget? page = switch (index) {
+      0 => const HomeOrtuPage(),
+      1 => const DataAnakPage(),
+      2 => const JadwalPage(),
+      3 => const ArtikelPage(),
+      4 => const ProfilPage(),
+      _ => null,
+    };
+
+    if (page != null) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // ISI BERSAMA
+  // ---------------------------------------------------------------------------
+  Widget _scrollableState(Widget child) {
+    // Dibungkus agar tarik-untuk-memperbarui tetap berfungsi di keadaan kosong.
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Center(child: child),
         ),
       ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const LoadingState(message: 'Memuat riwayat');
+    }
+
+    if (_loadError != null) {
+      return ErrorState(
+        title: 'Riwayat belum bisa dimuat',
+        message: _loadError!,
+        onRetry: _loadHistory,
+      );
+    }
+
+    if (_entries.isEmpty) {
+      final EmptyState empty;
+
+      if (_noChildren) {
+        empty = EmptyState(
+          icon: Icons.child_care_rounded,
+          title: 'Belum ada data anak',
+          message: widget.isKader
+              ? 'Riwayat akan muncul setelah ada anak yang terdaftar di Posyandu.'
+              : 'Daftarkan anak di menu Anak untuk melihat riwayatnya.',
+        );
+      } else {
+        empty = EmptyState(
+          icon: widget.onlyVaccinations
+              ? Icons.vaccines_outlined
+              : Icons.history_rounded,
+          title: widget.onlyVaccinations
+              ? 'Belum ada catatan imunisasi'
+              : 'Belum ada riwayat tercatat',
+          message: widget.isKader
+              ? 'Data pemeriksaan dan imunisasi akan muncul di sini.'
+              : 'Catatan akan muncul setelah Kader mencatat pemeriksaan atau imunisasi anak Anda.',
+        );
+      }
+
+      return RefreshIndicator(
+        onRefresh: _loadHistory,
+        child: _scrollableState(empty),
+      );
+    }
+
+    // Susunan: judul bulan, lalu catatan bulan itu (terbaru di atas).
+    final children = <Widget>[];
+    int? lastKey;
+
+    for (final entry in _entries) {
+      final date = DateTime.tryParse(entry.date);
+      final key = date == null ? -1 : date.year * 100 + date.month;
+
+      if (key != lastKey) {
+        children.add(
+          Padding(
+            padding: EdgeInsets.only(
+              top: lastKey == null ? 0 : AppSpace.lg,
+              bottom: AppSpace.sm,
+            ),
+            child: Semantics(
+              header: true,
+              child: Text(
+                date == null
+                    ? 'Tanggal tidak diketahui'
+                    : '${bulanLengkap(date.month)} ${date.year}',
+                style: AppText.label.copyWith(color: AppColors.secondaryText),
+              ),
+            ),
+          ),
+        );
+        lastKey = key;
+      } else {
+        children.add(const SizedBox(height: AppSpace.md));
+      }
+
+      children.add(
+        _HistoryCard(
+          entry: entry,
+          dateText: date == null ? entry.date : tanggalLengkap(date),
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadHistory,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpace.page,
+          AppSpace.sm,
+          AppSpace.page,
+          AppSpace.xl,
+        ),
+        children: children,
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // TAMPILAN KADER
+  // ===========================================================================
+  Widget _buildKader(BuildContext context) {
+    return Theme(
+      data: AppTheme.kader,
       child: Scaffold(
-        backgroundColor: Colors.white,
         floatingActionButton: KaderCenterFab(
           onPressed: () => Navigator.push(
             context,
@@ -204,13 +352,14 @@ class _RiwayatPageState extends State<RiwayatPage> {
         bottomNavigationBar: KaderBottomAppBar(
           selectedIndex: -1,
           onTabSelected: (index) {
-            final page = switch (index) {
+            final Widget? page = switch (index) {
               0 => const HomeKaderPage(),
               1 => const DataAnakPage(isKader: true),
               2 => const JadwalPage(isKader: true),
               3 => const ProfilPage(),
               _ => null,
             };
+
             if (page != null) {
               Navigator.pushReplacement(
                 context,
@@ -220,233 +369,49 @@ class _RiwayatPageState extends State<RiwayatPage> {
           },
         ),
         body: SafeArea(
-          child: RefreshIndicator(
-            onRefresh: _loadHistory,
-            color: AppColors.kader,
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(18, 14, 18, 32),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      IconButton(
-                        onPressed: () => Navigator.maybePop(context),
-                        icon: const Icon(
-                          Icons.chevron_left_rounded,
-                          size: 28,
-                          color: Color(0xFF0F172A),
-                        ),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                          minWidth: 36,
-                          minHeight: 36,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Riwayat Global',
-                              style: GoogleFonts.fredoka(
-                                fontSize: 22,
-                                fontWeight: FontWeight.w600,
-                                color: const Color(0xFF0F172A),
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Catatan pemeriksaan & imunisasi Posyandu',
-                              style: GoogleFonts.nunito(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: const Color(0xFF64748B),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      KaderLogoutButton(onPressed: _logout),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  if (_isLoading)
-                    const Padding(
-                      padding: EdgeInsets.all(40),
-                      child: Center(
-                        child: CircularProgressIndicator(color: AppColors.kader),
-                      ),
-                    )
-                  else if (_loadError != null)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 40),
-                      child: Center(
-                        child: Column(
-                          children: [
-                            const Icon(
-                              Icons.cloud_off_outlined,
-                              color: AppColors.kader,
-                              size: 42,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              _loadError!,
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.nunito(
-                                color: const Color(0xFF64748B),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            TextButton(
-                              onPressed: _loadHistory,
-                              child: const Text('Coba lagi'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  else if (_entries.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 40),
-                      child: Center(
-                        child: Column(
-                          children: [
-                            Container(
-                              width: 64,
-                              height: 64,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFEDE9FE),
-                                borderRadius: BorderRadius.circular(22),
-                              ),
-                              child: const Icon(
-                                Icons.history_rounded,
-                                color: Color(0xFF6D28D9),
-                                size: 32,
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-                            Text(
-                              'Belum ada riwayat tercatat.',
-                              style: GoogleFonts.fredoka(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: const Color(0xFF0F172A),
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Data pemeriksaan atau imunisasi akan muncul di sini.',
-                              style: GoogleFonts.nunito(
-                                color: const Color(0xFF64748B),
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  else
-                    ..._entries.map((entry) {
-                      final isVaccine = entry.isVaccination;
-                      return Column(
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                width: 46,
-                                height: 46,
-                                decoration: BoxDecoration(
-                                  color: isVaccine
-                                      ? const Color(0xFFFFE4D6)
-                                      : const Color(0xFFD1FAE5),
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Icon(
-                                  isVaccine
-                                      ? Icons.vaccines_outlined
-                                      : Icons.monitor_weight_outlined,
-                                  color: isVaccine
-                                      ? const Color(0xFFEA580C)
-                                      : const Color(0xFF047857),
-                                  size: 24,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          entry.childName,
-                                          style: GoogleFonts.fredoka(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                            color: const Color(0xFF0F172A),
-                                          ),
-                                        ),
-                                        Text(
-                                          entry.date,
-                                          style: GoogleFonts.nunito(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                            color: const Color(0xFF94A3B8),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      entry.title,
-                                      style: GoogleFonts.nunito(
-                                        color: isVaccine
-                                            ? const Color(0xFFEA580C)
-                                            : const Color(0xFF047857),
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      entry.detail,
-                                      style: GoogleFonts.nunito(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                        color: const Color(0xFF334155),
-                                      ),
-                                    ),
-                                    if (entry.note.isNotEmpty) ...[
-                                      const SizedBox(height: 3),
-                                      Text(
-                                        entry.note,
-                                        style: GoogleFonts.nunito(
-                                          color: const Color(0xFF64748B),
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          const KaderDashedDivider(),
-                          const SizedBox(height: 12),
-                        ],
-                      );
-                    }),
-                ],
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpace.sm,
+                  AppSpace.md,
+                  AppSpace.sm,
+                  AppSpace.sm,
+                ),
+                child: KaderTopBar(
+                  title: 'Riwayat Global',
+                  subtitle: _isLoading || _loadError != null
+                      ? 'Catatan pemeriksaan & imunisasi Posyandu'
+                      : '${_entries.length} catatan pemeriksaan & imunisasi',
+                  onBack: () => Navigator.maybePop(context),
+                  trailing: KaderLogoutButton(onPressed: _logout),
+                ),
               ),
-            ),
+              Expanded(child: _buildBody()),
+            ],
           ),
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // TAMPILAN ORANG TUA
+  // ===========================================================================
+  Widget _buildParent(BuildContext context) {
+    return Theme(
+      data: AppTheme.parent,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(
+            widget.onlyVaccinations ? 'Riwayat Imunisasi' : 'Riwayat Anak',
+          ),
+        ),
+        body: _buildBody(),
+        bottomNavigationBar: AppBottomNav(
+          isKader: false,
+          selectedIndex: 1,
+          onTap: (index) => _onParentNavigationTap(context, index),
         ),
       ),
     );
@@ -454,163 +419,110 @@ class _RiwayatPageState extends State<RiwayatPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.isKader) {
-      return _buildKader(context);
-    }
-    final accentColor = widget.isKader ? AppColors.kader : AppColors.parent;
-    return Theme(
-      data: widget.isKader ? AppTheme.kader : AppTheme.parent,
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        appBar: AppBar(
-          title: Text(
-            widget.onlyVaccinations
-                ? 'Riwayat Imunisasi'
-                : widget.isKader
-                ? 'Riwayat Global'
-                : 'Riwayat Anak',
+    return widget.isKader ? _buildKader(context) : _buildParent(context);
+  }
+}
+
+// =============================================================================
+// KARTU RIWAYAT
+// =============================================================================
+class _HistoryCard extends StatelessWidget {
+  final _HistoryEntry entry;
+  final String dateText;
+
+  const _HistoryCard({required this.entry, required this.dateText});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isVaccine = entry.isVaccination;
+
+    return AppCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: scheme.primaryContainer,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              isVaccine
+                  ? Icons.vaccines_outlined
+                  : Icons.monitor_weight_outlined,
+              size: 24,
+              color: scheme.primary,
+            ),
           ),
-        ),
-        body: RefreshIndicator(
-          onRefresh: _loadHistory,
-          color: accentColor,
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _loadError != null
-              ? ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(24),
-                  children: [
-                    const SizedBox(height: 80),
-                    Icon(
-                      Icons.cloud_off_outlined,
-                      color: accentColor,
-                      size: 46,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(_loadError!, textAlign: TextAlign.center),
-                    TextButton(
-                      onPressed: _loadHistory,
-                      child: const Text('Coba lagi'),
-                    ),
-                  ],
-                )
-              : _entries.isEmpty
-              ? ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(24),
-                  children: [
-                    const SizedBox(height: 80),
-                    Icon(Icons.history_rounded, color: accentColor, size: 52),
-                    const SizedBox(height: 14),
-                    Text(
-                      widget.onlyVaccinations
-                          ? 'Belum ada catatan imunisasi.'
-                          : 'Belum ada riwayat pemeriksaan.',
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                )
-              : ListView.builder(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(18),
-                  itemCount: _entries.length,
-                  itemBuilder: (context, index) {
-                    final entry = _entries[index];
-                    return Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                width: 46,
-                                height: 46,
-                                decoration: BoxDecoration(
-                                  color: accentColor.withValues(alpha: .1),
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                                child: Icon(entry.icon, color: accentColor),
-                              ),
-                              const SizedBox(width: 13),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      entry.title,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 15,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      entry.childName,
-                                      style: TextStyle(
-                                        color: accentColor,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      entry.date,
-                                      style: const TextStyle(
-                                        color: AppColors.secondaryText,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(entry.detail),
-                                    if (entry.note.isNotEmpty) ...[
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        entry.note,
-                                        style: const TextStyle(
-                                          color: AppColors.secondaryText,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            ],
+          const SizedBox(width: AppSpace.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Jenis catatan ditulis dengan teks, bukan hanya warna.
+                Text(
+                  isVaccine ? 'Imunisasi' : 'Pemeriksaan gizi',
+                  style: AppText.caption.copyWith(
+                    color: scheme.primary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(entry.childName, style: AppText.subtitle),
+                Text(dateText, style: AppText.caption),
+                const SizedBox(height: AppSpace.sm),
+                Text(
+                  entry.detail,
+                  style: AppText.body.copyWith(fontWeight: FontWeight.w700),
+                ),
+                if (entry.note.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.only(top: 2),
+                        child: Icon(
+                          Icons.notes_rounded,
+                          size: 16,
+                          color: AppColors.secondaryText,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          entry.note,
+                          style: AppText.body.copyWith(
+                            color: AppColors.secondaryText,
                           ),
                         ),
-                        const Divider(color: AppColors.divider, height: 1),
-                      ],
-                    );
-                  },
-                ),
-        ),
-        bottomNavigationBar: AppBottomNav(
-          isKader: widget.isKader,
-          selectedIndex: widget.isKader ? -1 : 1,
-          onTap: (index) => _onNavigationTap(context, index),
-        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
 class _HistoryEntry {
-  final IconData icon;
-  final String title;
+  final bool isVaccination;
   final String childName;
   final String date;
   final String detail;
   final String note;
-  final bool isVaccination;
 
   const _HistoryEntry({
-    required this.icon,
-    required this.title,
+    required this.isVaccination,
     required this.childName,
     required this.date,
     required this.detail,
     required this.note,
-    this.isVaccination = false,
   });
 }

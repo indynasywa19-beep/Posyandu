@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../utils/app_copy.dart';
+import '../widgets/app_components.dart';
+import '../widgets/app_dialogs.dart';
 import '../widgets/app_theme.dart';
+import '../widgets/design_tokens.dart';
 import '../widgets/kader_widgets.dart';
 import 'data_anak_page.dart';
 import 'imunisasi_page.dart';
@@ -23,18 +26,6 @@ class _HomeKaderPageState extends State<HomeKaderPage> {
   late Future<int> _childCount;
   late RealtimeChannel _childrenChannel;
   bool _realtimeErrorReported = false;
-
-  // =========================================================
-  // WARNA KADER
-  // =========================================================
-  static const Color primaryBlue = Color(0xFF1261A0);
-  static const Color navy = Color(0xFF123B5D);
-  static const Color lavender = Color(0xFFA99BCF);
-  static const Color lavenderSoft = Color(0xFFF4F1FA);
-  static const Color blueSoft = Color(0xFFEAF3FA);
-  static const Color textDark = Color(0xFF123B5D);
-  static const Color textSecondary = Color(0xFF64748B);
-  static const Color border = Color(0xFFE2E8F0);
 
   @override
   void initState() {
@@ -57,11 +48,12 @@ class _HomeKaderPageState extends State<HomeKaderPage> {
               !_realtimeErrorReported &&
               mounted) {
             _realtimeErrorReported = true;
+            logError(error ?? status, 'realtime anak kader');
 
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
+              const SnackBar(
                 content: Text(
-                  'Pembaruan langsung monitoring gagal: ${error ?? status}',
+                  'Pembaruan otomatis belum aktif. Tarik layar ke bawah untuk memperbarui.',
                 ),
               ),
             );
@@ -94,7 +86,15 @@ class _HomeKaderPageState extends State<HomeKaderPage> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal memuat ringkasan monitoring: $error')),
+          SnackBar(
+            content: Text(
+              friendlyError(
+                error,
+                fallback:
+                    'Ringkasan belum bisa dimuat. Tarik layar ke bawah untuk mencoba lagi.',
+              ),
+            ),
+          ),
         );
       }
     }
@@ -113,6 +113,15 @@ class _HomeKaderPageState extends State<HomeKaderPage> {
   }
 
   Future<void> _logout(BuildContext context) async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Keluar dari akun?',
+      message: 'Anda perlu masuk lagi untuk membuka SI-POSYANDU.',
+      confirmLabel: 'Keluar',
+      destructive: true,
+    );
+    if (!confirmed || !context.mounted) return;
+
     try {
       await Supabase.instance.client.auth.signOut();
 
@@ -126,9 +135,16 @@ class _HomeKaderPageState extends State<HomeKaderPage> {
     } catch (error) {
       if (!context.mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Gagal keluar dari akun: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            friendlyError(
+              error,
+              fallback: 'Belum bisa keluar dari akun. Coba lagi.',
+            ),
+          ),
+        ),
+      );
     }
   }
 
@@ -148,39 +164,18 @@ class _HomeKaderPageState extends State<HomeKaderPage> {
   @override
   Widget build(BuildContext context) {
     final user = Supabase.instance.client.auth.currentUser;
-
-    final rawName =
-        user?.userMetadata?['display_name'] ?? user?.userMetadata?['full_name'];
-
-    final name = rawName is String && rawName.trim().isNotEmpty
-        ? rawName.trim()
-        : 'Kader';
+    final name = displayNameFromUser(user, fallback: 'Kader');
 
     return Theme(
-      data: AppTheme.kader.copyWith(
-        scaffoldBackgroundColor: lavenderSoft,
-        snackBarTheme: const SnackBarThemeData(
-          behavior: SnackBarBehavior.floating,
-        ),
-      ),
-
+      data: AppTheme.kader,
       child: Scaffold(
-        backgroundColor: lavenderSoft,
-
-        // ===================================================
-        // FAB
-        // ===================================================
         floatingActionButton: KaderCenterFab(
           onPressed: () {
             _open(context, const PemeriksaanPage(openFormOnStart: true));
           },
         ),
-
         floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
 
-        // ===================================================
-        // BOTTOM NAVIGATION
-        // ===================================================
         bottomNavigationBar: KaderBottomAppBar(
           selectedIndex: 0,
           onTabSelected: (index) {
@@ -191,104 +186,60 @@ class _HomeKaderPageState extends State<HomeKaderPage> {
         body: SafeArea(
           child: RefreshIndicator(
             onRefresh: _refresh,
-            color: primaryBlue,
-
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-
-              padding: const EdgeInsets.fromLTRB(18, 14, 18, 28),
-
+              padding: const EdgeInsets.fromLTRB(
+                AppSpace.page,
+                AppSpace.md,
+                AppSpace.page,
+                AppSpace.xl,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-
                 children: [
-                  // =================================================
-                  // HEADER
-                  // =================================================
+                  // Sapaan
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
-
                     children: [
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-
                           children: [
                             Text(
-                              'Halo, $name!',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-
-                              style: GoogleFonts.fredoka(
-                                color: navy,
-                                fontSize: 23,
-                                fontWeight: FontWeight.w600,
+                              greetingNow(),
+                              style: AppText.body.copyWith(
+                                color: AppColors.secondaryText,
                               ),
                             ),
-
-                            const SizedBox(height: 3),
-
                             Text(
-                              'Posyandu · Layanan hari ini',
-                              style: GoogleFonts.nunito(
-                                color: textSecondary,
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w600,
-                              ),
+                              name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppText.headline,
                             ),
                           ],
                         ),
                       ),
-
-                      const SizedBox(width: 10),
-
-                      // LOGOUT
+                      const SizedBox(width: AppSpace.md),
                       KaderLogoutButton(onPressed: () => _logout(context)),
                     ],
                   ),
+                  const SizedBox(height: AppSpace.lg),
 
-                  const SizedBox(height: 16),
-
-                  // =================================================
-                  // HERO CARD
-                  // =================================================
+                  // Ringkasan dan aksi utama
                   FutureBuilder<int>(
                     future: _childCount,
-
                     builder: (context, snapshot) {
-                      final now = DateTime.now();
-
-                      const months = [
-                        'Jan',
-                        'Feb',
-                        'Mar',
-                        'Apr',
-                        'Mei',
-                        'Jun',
-                        'Jul',
-                        'Agt',
-                        'Sep',
-                        'Okt',
-                        'Nov',
-                        'Des',
-                      ];
-
-                      final dateLabel =
-                          'Kegiatan hari ini · '
-                          '${now.day} '
-                          '${months[now.month - 1]}';
-
                       final countText = snapshot.hasError
-                          ? 'Data belum tersedia'
+                          ? 'Data anak belum bisa dimuat'
                           : !snapshot.hasData
-                          ? 'Memuat data anak...'
+                          ? 'Memuat data anak…'
                           : '${snapshot.data} anak terdaftar';
 
                       return KaderHeroCard(
-                        dateLabel: dateLabel,
-
+                        dateLabel: tanggalLengkap(DateTime.now()),
                         countText: countText,
-
+                        onRetry: snapshot.hasError ? _refreshChildCount : null,
                         onActionPressed: () {
                           _open(
                             context,
@@ -298,83 +249,34 @@ class _HomeKaderPageState extends State<HomeKaderPage> {
                       );
                     },
                   ),
+                  const SizedBox(height: AppSpace.md),
 
-                  const SizedBox(height: 14),
-
-                  // =================================================
-                  // SEARCH
-                  // =================================================
+                  // Cari
                   KaderSearchBar(
                     hintText: 'Cari nama anak atau NIK',
-
                     onTap: () {
                       _open(context, const DataAnakPage(isKader: true));
                     },
                   ),
+                  const SizedBox(height: AppSpace.xl),
 
-                  const SizedBox(height: 22),
-
-                  // =================================================
-                  // LAYANAN
-                  // =================================================
-                  Text(
-                    'Layanan',
-
-                    style: GoogleFonts.fredoka(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: navy,
-                    ),
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  // =================================================
-                  // 6 MENU - 2 KOLOM
-                  // =================================================
-                  GridView.count(
-                    crossAxisCount: 2,
-
-                    shrinkWrap: true,
-
-                    physics: const NeverScrollableScrollPhysics(),
-
-                    crossAxisSpacing: 12,
-
-                    mainAxisSpacing: 12,
-
-                    childAspectRatio: 1.55,
-
+                  // Layanan
+                  const SectionHeader(title: 'Layanan'),
+                  const SizedBox(height: AppSpace.md),
+                  ServiceGrid(
                     children: [
-                      // 1. MONITORING ANAK
-                      _buildServiceCard(
+                      ServiceTile(
                         icon: Icons.groups_outlined,
-
                         title: 'Monitoring Anak',
-
                         subtitle: 'Data & perkembangan',
-
-                        background: blueSoft,
-
-                        iconColor: primaryBlue,
-
                         onTap: () {
                           _open(context, const DataAnakPage(isKader: true));
                         },
                       ),
-
-                      // 2. CATAT GIZI
-                      _buildServiceCard(
+                      ServiceTile(
                         icon: Icons.monitor_weight_outlined,
-
                         title: 'Catat Gizi',
-
                         subtitle: 'Berat & tinggi',
-
-                        background: lavenderSoft,
-
-                        iconColor: lavender,
-
                         onTap: () {
                           _open(
                             context,
@@ -382,19 +284,10 @@ class _HomeKaderPageState extends State<HomeKaderPage> {
                           );
                         },
                       ),
-
-                      // 3. IMUNISASI
-                      _buildServiceCard(
+                      ServiceTile(
                         icon: Icons.vaccines_outlined,
-
                         title: 'Imunisasi',
-
                         subtitle: 'Catatan vaksin',
-
-                        background: const Color(0xFFF1F5F9),
-
-                        iconColor: primaryBlue,
-
                         onTap: () {
                           _open(
                             context,
@@ -402,239 +295,35 @@ class _HomeKaderPageState extends State<HomeKaderPage> {
                           );
                         },
                       ),
-
-                      // 4. JADWAL
-                      _buildServiceCard(
+                      ServiceTile(
                         icon: Icons.calendar_month_outlined,
-
                         title: 'Jadwal',
-
                         subtitle: 'Jadwal posyandu',
-
-                        background: const Color(0xFFF4F1FA),
-
-                        iconColor: const Color(0xFF7D6DA8),
-
                         onTap: () {
                           _open(context, const JadwalPage(isKader: true));
                         },
                       ),
-
-                      // 5. RIWAYAT GLOBAL
-                      _buildServiceCard(
+                      ServiceTile(
                         icon: Icons.history_rounded,
-
                         title: 'Riwayat Global',
-
                         subtitle: 'Riwayat pemeriksaan',
-
-                        background: blueSoft,
-
-                        iconColor: navy,
-
                         onTap: () {
                           _open(context, const RiwayatPage(isKader: true));
                         },
                       ),
-
-                      // 6. PROFIL
-                      _buildServiceCard(
+                      ServiceTile(
                         icon: Icons.person_outline_rounded,
-
                         title: 'Profil',
-
                         subtitle: 'Data akun kader',
-
-                        background: lavenderSoft,
-
-                        iconColor: const Color(0xFF8B7BB8),
-
                         onTap: () {
                           _open(context, const ProfilPage());
                         },
                       ),
                     ],
                   ),
-
-                  const SizedBox(height: 18),
-
-                  // =================================================
-                  // INFO BAWAH
-                  // =================================================
-                  Container(
-                    width: double.infinity,
-
-                    padding: const EdgeInsets.all(14),
-
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-
-                      borderRadius: BorderRadius.circular(16),
-
-                      border: Border.all(color: border),
-                    ),
-
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 36,
-                          height: 36,
-
-                          decoration: BoxDecoration(
-                            color: blueSoft,
-                            shape: BoxShape.circle,
-                          ),
-
-                          child: const Icon(
-                            Icons.health_and_safety_outlined,
-                            color: primaryBlue,
-                            size: 20,
-                          ),
-                        ),
-
-                        const SizedBox(width: 10),
-
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-
-                            children: [
-                              Text(
-                                'Layanan Posyandu',
-                                style: GoogleFonts.nunito(
-                                  color: navy,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-
-                              const SizedBox(height: 2),
-
-                              Text(
-                                'Kelola data dan layanan kesehatan anak dengan mudah.',
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-
-                                style: GoogleFonts.nunito(
-                                  color: textSecondary,
-                                  fontSize: 11.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // =============================================================
-  // SERVICE CARD
-  // =============================================================
-  Widget _buildServiceCard({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Color background,
-    required Color iconColor,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-
-      child: InkWell(
-        onTap: onTap,
-
-        borderRadius: BorderRadius.circular(18),
-
-        child: Container(
-          padding: const EdgeInsets.all(13),
-
-          decoration: BoxDecoration(
-            color: Colors.white,
-
-            borderRadius: BorderRadius.circular(18),
-
-            border: Border.all(color: border, width: 1),
-
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.035),
-
-                blurRadius: 10,
-
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-
-            children: [
-              // ICON
-              Container(
-                width: 44,
-                height: 44,
-
-                decoration: BoxDecoration(
-                  color: background,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-
-                child: Icon(icon, color: iconColor, size: 23),
-              ),
-
-              const SizedBox(width: 10),
-
-              // TEXT
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-
-                  crossAxisAlignment: CrossAxisAlignment.start,
-
-                  children: [
-                    Text(
-                      title,
-
-                      maxLines: 2,
-
-                      overflow: TextOverflow.ellipsis,
-
-                      style: GoogleFonts.nunito(
-                        color: navy,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-
-                    const SizedBox(height: 2),
-
-                    Text(
-                      subtitle,
-
-                      maxLines: 1,
-
-                      overflow: TextOverflow.ellipsis,
-
-                      style: GoogleFonts.nunito(
-                        color: textSecondary,
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
           ),
         ),
       ),

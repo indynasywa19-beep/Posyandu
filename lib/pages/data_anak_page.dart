@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../utils/app_copy.dart';
+import '../utils/validators.dart';
+import '../widgets/app_components.dart';
+import '../widgets/app_dialogs.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/app_widgets.dart';
 import '../widgets/design_tokens.dart';
@@ -13,6 +16,7 @@ import 'home_ortu_page.dart';
 import 'jadwal_page.dart';
 import 'login_page.dart';
 import 'pemeriksaan_page.dart';
+import 'perkembangan_page.dart';
 import 'profil_page.dart';
 
 class DataAnakPage extends StatefulWidget {
@@ -26,6 +30,7 @@ class DataAnakPage extends StatefulWidget {
 
 class _DataAnakPageState extends State<DataAnakPage> {
   final _supabase = Supabase.instance.client;
+
   List<Map<String, dynamic>> _children = [];
   bool _isLoading = true;
   String? _loadError;
@@ -37,8 +42,12 @@ class _DataAnakPageState extends State<DataAnakPage> {
     _loadChildren();
   }
 
+  // ---------------------------------------------------------------------------
+  // DATA
+  // ---------------------------------------------------------------------------
   Future<void> _loadChildren() async {
     final user = _supabase.auth.currentUser;
+
     if (!widget.isKader && user == null) {
       setState(() {
         _children = [];
@@ -52,8 +61,10 @@ class _DataAnakPageState extends State<DataAnakPage> {
       _isLoading = true;
       _loadError = null;
     });
+
     try {
       final List<Map<String, dynamic>> rows;
+
       if (widget.isKader) {
         rows = await _supabase.from('anak').select().order('nama');
       } else {
@@ -63,323 +74,170 @@ class _DataAnakPageState extends State<DataAnakPage> {
             .eq('user_id', user!.id)
             .order('nama');
       }
+
       if (!mounted) return;
+
       setState(() {
         _children = rows;
         _isLoading = false;
       });
     } catch (error) {
       if (!mounted) return;
+
       setState(() {
-        _loadError = 'Gagal memuat data anak: $error';
+        _loadError = friendlyError(
+          error,
+          fallback: 'Data anak belum bisa dimuat. Coba lagi sebentar lagi.',
+        );
         _isLoading = false;
       });
     }
   }
 
-  void _showForm({Map<String, dynamic>? child}) {
-    final nameController = TextEditingController(
-      text: child?['nama'] as String? ?? '',
-    );
-    final nikController = TextEditingController(
-      text: child?['nik'] as String? ?? '',
-    );
-    final birthDateController = TextEditingController(
-      text: child?['tanggal_lahir'] as String? ?? '',
-    );
-    var gender = child?['jenis_kelamin'] as String? ?? 'Perempuan';
-    var nikErrorText = _nikError(nikController.text);
-    var isSaving = false;
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) {
-          final canSave =
-              nameController.text.trim().isNotEmpty &&
-              RegExp(r'^\d{16}$').hasMatch(nikController.text) &&
-              birthDateController.text.isNotEmpty &&
-              !isSaving;
-
-          return Scaffold(
-            backgroundColor: Colors.white,
-            appBar: AppBar(
-              title: Text(child == null ? 'Data Anak' : 'Ubah Data Anak'),
-              leading: IconButton(
-                tooltip: 'Kembali',
-                onPressed: isSaving
-                    ? null
-                    : () => Navigator.of(dialogContext).pop(),
-                icon: const Icon(Icons.arrow_back_rounded),
-              ),
-            ),
-            body: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Daftarkan si kecil',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: nameController,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(
-                      labelText: 'Nama Anak',
-                      prefixIcon: Icon(Icons.child_care_outlined),
-                    ),
-                    onChanged: (_) => setDialogState(() {}),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: nikController,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(16),
-                    ],
-                    decoration: InputDecoration(
-                      labelText: 'NIK',
-                      prefixIcon: const Icon(Icons.badge_outlined),
-                      errorText: nikErrorText,
-                      counterText: '${nikController.text.length}/16',
-                    ),
-                    onChanged: (value) {
-                      setDialogState(() {
-                        nikErrorText = _nikError(value);
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: birthDateController,
-                    readOnly: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Tanggal Lahir',
-                      hintText: 'Pilih tanggal lahir',
-                      prefixIcon: Icon(Icons.calendar_month_outlined),
-                    ),
-                    onTap: () async {
-                      final now = DateTime.now();
-                      final parsedDate = DateTime.tryParse(
-                        birthDateController.text,
-                      );
-                      final picked = await showDatePicker(
-                        context: dialogContext,
-                        initialDate: parsedDate ?? now,
-                        firstDate: DateTime(1900),
-                        lastDate: now,
-                      );
-                      if (picked == null) return;
-                      setDialogState(() {
-                        birthDateController.text =
-                            '${picked.year.toString().padLeft(4, '0')}-'
-                            '${picked.month.toString().padLeft(2, '0')}-'
-                            '${picked.day.toString().padLeft(2, '0')}';
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Jenis kelamin',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 8),
-                        ChipSelector(
-                          options: const ['Laki-laki', 'Perempuan'],
-                          selected: gender,
-                          roleColor: widget.isKader
-                              ? AppColors.kader
-                              : AppColors.parent,
-                          softColor: widget.isKader
-                              ? AppColors.kaderSoft
-                              : AppColors.parentSoft,
-                          onSelected: (value) =>
-                              setDialogState(() => gender = value),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            bottomNavigationBar: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 8, 18, 12),
-                child: FilledButton(
-                onPressed: canSave
-                    ? () async {
-                        final user = _supabase.auth.currentUser;
-                        if (user == null) {
-                          _showMessage(
-                            'Sesi login berakhir. Silakan masuk kembali.',
-                            isError: true,
-                          );
-                          return;
-                        }
-                        setDialogState(() => isSaving = true);
-                        try {
-                          final data = <String, dynamic>{
-                            'nama': nameController.text.trim(),
-                            'nik': nikController.text,
-                            'tanggal_lahir': birthDateController.text,
-                            'jenis_kelamin': gender,
-                          };
-                          if (child == null) {
-                            await _supabase.from('anak').insert({
-                              ...data,
-                              'user_id': user.id,
-                            });
-                          } else {
-                            await _supabase
-                                .from('anak')
-                                .update(data)
-                                .eq('id', child['id']);
-                          }
-                          if (!mounted || !dialogContext.mounted) return;
-                          Navigator.of(dialogContext).pop();
-                          _showMessage('Data anak berhasil disimpan.');
-                          await _loadChildren();
-                        } catch (error) {
-                          if (!mounted || !dialogContext.mounted) return;
-                          setDialogState(() => isSaving = false);
-                          _showMessage(
-                            'Gagal menyimpan data anak: $error',
-                            isError: true,
-                          );
-                        }
-                      }
-                    : null,
-                child: isSaving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Daftarkan anak'),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    ).whenComplete(() {
-      nameController.dispose();
-      nikController.dispose();
-      birthDateController.dispose();
-    });
-  }
-
-  String? _nikError(String nik) {
-    if (!RegExp(r'^\d{16}$').hasMatch(nik)) {
-      return 'NIK harus terdiri dari 16 digit angka';
-    }
-    return null;
-  }
-
-  Future<void> _deleteChild(Map<String, dynamic> child) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Hapus data anak?'),
-        content: Text('Data ${child['nama']} akan dihapus.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Hapus'),
-          ),
-        ],
+  void _openChildDetail(Map<String, dynamic> child) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            PerkembanganPage(isKader: widget.isKader, anakId: child['id']),
       ),
     );
-    if (confirmed != true) return;
-    try {
-      await _supabase.from('anak').delete().eq('id', child['id']);
-      _showMessage('Data anak berhasil dihapus.');
-      await _loadChildren();
-    } catch (error) {
-      _showMessage('Gagal menghapus data anak: $error', isError: true);
-    }
   }
 
-  void _showMessage(String message, {bool isError = false}) {
+  void _showMessage(String message) {
     if (!mounted) return;
+
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: isError ? Colors.red.shade700 : null,
-        ),
-      );
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
+  String _tanggalTampil(String? iso) {
+    if (iso == null || iso.isEmpty) return '-';
+    final date = DateTime.tryParse(iso);
+    return date == null ? iso : tanggalLengkap(date);
+  }
+
+  // ---------------------------------------------------------------------------
+  // FORM TAMBAH / UBAH
+  // ---------------------------------------------------------------------------
+  Future<void> _showForm({Map<String, dynamic>? child}) async {
+    final message = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => Theme(
+        data: AppTheme.forRole(isKader: widget.isKader),
+        child: _ChildFormSheet(child: child),
+      ),
+    );
+
+    if (!mounted || message == null) return;
+
+    _showMessage(message);
+    await _loadChildren();
+  }
+
+  // ---------------------------------------------------------------------------
+  // HAPUS
+  // ---------------------------------------------------------------------------
+  Future<void> _deleteChild(Map<String, dynamic> child) async {
+    final nama = child['nama']?.toString() ?? 'anak ini';
+
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Hapus data anak?',
+      message: 'Data $nama akan dihapus dan tidak bisa dikembalikan.',
+      confirmLabel: 'Hapus',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+
+    try {
+      await _supabase.from('anak').delete().eq('id', child['id']);
+
+      _showMessage('Data $nama dihapus.');
+      await _loadChildren();
+    } catch (error) {
+      _showMessage(
+        friendlyError(
+          error,
+          fallback: 'Data anak belum bisa dihapus. Coba lagi.',
+        ),
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // KELUAR AKUN
+  // ---------------------------------------------------------------------------
   Future<void> _logout() async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Keluar dari akun?',
+      message: 'Anda perlu masuk lagi untuk membuka SI-POSYANDU.',
+      confirmLabel: 'Keluar',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+
     try {
       await _supabase.auth.signOut();
+
       if (!mounted) return;
+
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const LoginPage()),
         (_) => false,
       );
     } catch (error) {
-      _showMessage('Gagal keluar dari akun: $error', isError: true);
+      _showMessage(
+        friendlyError(
+          error,
+          fallback: 'Belum bisa keluar dari akun. Coba lagi.',
+        ),
+      );
     }
   }
 
-  void _onNavigationTap(BuildContext context, int index) {
-    final page = widget.isKader
-        ? switch (index) {
-            0 => const HomeKaderPage(),
-            2 => const PemeriksaanPage(openFormOnStart: true),
-            3 => const JadwalPage(isKader: true),
-            4 => const ProfilPage(),
-            _ => null,
-          }
-        : switch (index) {
-            0 => const HomeOrtuPage(),
-            2 => const JadwalPage(),
-            3 => const ArtikelPage(),
-            4 => const ProfilPage(),
-            _ => null,
-          };
+  // ---------------------------------------------------------------------------
+  // NAVIGASI (Orang Tua)
+  // ---------------------------------------------------------------------------
+  void _onParentNavigationTap(BuildContext context, int index) {
+    final Widget? page = switch (index) {
+      0 => const HomeOrtuPage(),
+      2 => const JadwalPage(),
+      3 => const ArtikelPage(),
+      4 => const ProfilPage(),
+      _ => null,
+    };
+
     if (page != null) {
       Navigator.push(context, MaterialPageRoute(builder: (_) => page));
     }
   }
 
-  Widget _buildKader(BuildContext context) {
+  List<Map<String, dynamic>> get _visibleChildren {
     final query = _searchQuery.trim().toLowerCase();
-    final visibleChildren = _children.where((child) {
+
+    return _children.where((child) {
       return query.isEmpty ||
           (child['nama']?.toString().toLowerCase().contains(query) ?? false) ||
           (child['nik']?.toString().contains(query) ?? false);
     }).toList();
+  }
+
+  // ===========================================================================
+  // TAMPILAN KADER
+  // ===========================================================================
+  Widget _buildKader(BuildContext context) {
+    final visible = _visibleChildren;
+    final query = _searchQuery.trim();
 
     return Theme(
-      data: AppTheme.kader.copyWith(
-        snackBarTheme: const SnackBarThemeData(
-          behavior: SnackBarBehavior.floating,
-        ),
-      ),
+      data: AppTheme.kader,
       child: Scaffold(
-        backgroundColor: Colors.white,
         floatingActionButton: KaderCenterFab(
           onPressed: () => Navigator.push(
             context,
@@ -392,12 +250,13 @@ class _DataAnakPageState extends State<DataAnakPage> {
         bottomNavigationBar: KaderBottomAppBar(
           selectedIndex: 1,
           onTabSelected: (index) {
-            final page = switch (index) {
+            final Widget? page = switch (index) {
               0 => const HomeKaderPage(),
               2 => const JadwalPage(isKader: true),
               3 => const ProfilPage(),
               _ => null,
             };
+
             if (page != null) {
               Navigator.pushReplacement(
                 context,
@@ -407,552 +266,301 @@ class _DataAnakPageState extends State<DataAnakPage> {
           },
         ),
         body: SafeArea(
-          child: RefreshIndicator(
-            onRefresh: _loadChildren,
-            color: AppColors.kader,
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(18, 14, 18, 32),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      IconButton(
-                        onPressed: () => Navigator.maybePop(context),
-                        icon: const Icon(
-                          Icons.chevron_left_rounded,
-                          size: 28,
-                          color: Color(0xFF0F172A),
-                        ),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                          minWidth: 36,
-                          minHeight: 36,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Monitoring Anak',
-                              style: GoogleFonts.fredoka(
-                                fontSize: 22,
-                                fontWeight: FontWeight.w600,
-                                color: const Color(0xFF0F172A),
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Daftar anak terdaftar di Posyandu',
-                              style: GoogleFonts.nunito(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: const Color(0xFF64748B),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Material(
-                        color: AppColors.kader,
-                        shape: const CircleBorder(),
-                        clipBehavior: Clip.antiAlias,
-                        child: InkWell(
-                          onTap: () => _showForm(),
-                          customBorder: const CircleBorder(),
-                          child: const SizedBox(
-                            width: 38,
-                            height: 38,
-                            child: Icon(
-                              Icons.add_rounded,
-                              color: Colors.white,
-                              size: 24,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      KaderLogoutButton(onPressed: _logout),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    child: TextField(
-                      onChanged: (value) => setState(() => _searchQuery = value),
-                      style: GoogleFonts.nunito(
-                        fontSize: 14,
-                        color: const Color(0xFF0F172A),
-                        fontWeight: FontWeight.w600,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: 'Cari nama anak atau NIK',
-                        hintStyle: GoogleFonts.nunito(
-                          color: const Color(0xFF94A3B8),
-                          fontSize: 13,
-                        ),
-                        prefixIcon: const Icon(
-                          Icons.search_rounded,
-                          color: Color(0xFF64748B),
-                          size: 20,
-                        ),
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Total: ${_children.length} anak',
-                        style: GoogleFonts.nunito(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF64748B),
-                        ),
-                      ),
-                      if (query.isNotEmpty)
-                        Text(
-                          '${visibleChildren.length} ditemukan',
-                          style: GoogleFonts.nunito(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.kader,
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  if (_isLoading)
-                    const Padding(
-                      padding: EdgeInsets.all(40),
-                      child: Center(
-                        child: CircularProgressIndicator(color: AppColors.kader),
-                      ),
-                    )
-                  else if (_loadError != null)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 36),
-                      child: Center(
-                        child: Column(
-                          children: [
-                            const Icon(
-                              Icons.cloud_off_outlined,
-                              size: 42,
-                              color: AppColors.kader,
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              _loadError!,
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.nunito(
-                                color: const Color(0xFF64748B),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            TextButton(
-                              onPressed: _loadChildren,
-                              child: const Text('Coba lagi'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  else if (visibleChildren.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 40),
-                      child: Center(
-                        child: Column(
-                          children: [
-                            const ChildAvatar(
-                              size: 56,
-                              faceColor: Color(0xFFF9C5E2),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              query.isEmpty
-                                  ? 'Belum ada data anak di Posyandu.'
-                                  : 'Tidak ada anak yang cocok dengan pencarian.',
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.fredoka(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: const Color(0xFF0F172A),
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              query.isEmpty
-                                  ? 'Tekan tombol + di kanan atas untuk mendaftar.'
-                                  : 'Periksa kembali ejaan nama atau 16 digit NIK.',
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.nunito(
-                                color: const Color(0xFF64748B),
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  else
-                    ...visibleChildren.map((child) {
-                      final name = child['nama'] as String? ?? 'Tanpa nama';
-                      final gender = child['jenis_kelamin'] as String? ?? '-';
-                      final birthDate = child['tanggal_lahir'] as String? ?? '-';
-                      final nik = child['nik'] as String? ?? '-';
-                      final isMale = gender.toLowerCase().contains('laki');
-
-                      return Column(
-                        children: [
-                          Row(
-                            children: [
-                              ChildAvatar(
-                                size: 44,
-                                faceColor: isMale
-                                    ? const Color(0xFFFFE78A)
-                                    : const Color(0xFFF9C5E2),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      name,
-                                      style: GoogleFonts.fredoka(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        color: const Color(0xFF0F172A),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      '$gender • Lahir $birthDate\nNIK: $nik',
-                                      style: GoogleFonts.nunito(
-                                        color: const Color(0xFF64748B),
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        height: 1.25,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Material(
-                                color: const Color(0xFFDBEAFE),
-                                shape: const CircleBorder(),
-                                clipBehavior: Clip.antiAlias,
-                                child: InkWell(
-                                  onTap: () => _showForm(child: child),
-                                  customBorder: const CircleBorder(),
-                                  child: const SizedBox(
-                                    width: 36,
-                                    height: 36,
-                                    child: Icon(
-                                      Icons.edit_outlined,
-                                      size: 18,
-                                      color: Color(0xFF1D4ED8),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Material(
-                                color: const Color(0xFFFFE4E6),
-                                shape: const CircleBorder(),
-                                clipBehavior: Clip.antiAlias,
-                                child: InkWell(
-                                  onTap: () => _deleteChild(child),
-                                  customBorder: const CircleBorder(),
-                                  child: const SizedBox(
-                                    width: 36,
-                                    height: 36,
-                                    child: Icon(
-                                      Icons.delete_outline_rounded,
-                                      size: 18,
-                                      color: Color(0xFFBE123C),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          const KaderDashedDivider(),
-                          const SizedBox(height: 12),
-                        ],
-                      );
-                    }),
-                ],
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpace.sm,
+                  AppSpace.md,
+                  AppSpace.sm,
+                  AppSpace.sm,
+                ),
+                child: KaderTopBar(
+                  title: 'Monitoring Anak',
+                  subtitle: 'Daftar anak terdaftar di Posyandu',
+                  onBack: () => Navigator.maybePop(context),
+                  trailing: KaderLogoutButton(onPressed: _logout),
+                ),
               ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (widget.isKader) {
-      return _buildKader(context);
-    }
-    final color = widget.isKader
-        ? AppColors.kader
-        : AppColors.parent;
-    final query = _searchQuery.trim().toLowerCase();
-    final visibleChildren = _children.where((child) {
-      return query.isEmpty ||
-          (child['nama']?.toString().toLowerCase().contains(query) ?? false) ||
-          (child['nik']?.toString().contains(query) ?? false);
-    }).toList();
-    return Theme(
-      data: widget.isKader ? AppTheme.kader : AppTheme.parent,
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        appBar: AppBar(
-          title: Text(widget.isKader ? 'Monitoring Anak' : 'Anak'),
-        ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => _showForm(),
-          backgroundColor: color,
-          foregroundColor: Colors.white,
-          icon: const Icon(Icons.add_rounded),
-          label: Text(widget.isKader ? 'Tambah Anak' : 'Tambah anak'),
-        ),
-        body: RefreshIndicator(
-          onRefresh: _loadChildren,
-          color: color,
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _loadError != null
-              ? ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(24),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpace.page),
+                child: AppSearchField(
+                  hint: 'Cari nama anak atau NIK',
+                  onChanged: (value) => setState(() => _searchQuery = value),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpace.page,
+                  AppSpace.sm,
+                  AppSpace.page,
+                  0,
+                ),
+                child: Row(
                   children: [
-                    const SizedBox(height: 80),
-                    Icon(Icons.cloud_off_outlined, size: 48, color: color),
-                    const SizedBox(height: 12),
-                    Text(_loadError!, textAlign: TextAlign.center),
-                    const SizedBox(height: 12),
-                    TextButton(
-                      onPressed: _loadChildren,
-                      child: const Text('Coba lagi'),
-                    ),
-                  ],
-                )
-              : ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(18, 12, 18, 90),
-                  children: [
-                    if (!widget.isKader) _parentProfileCard(color),
-                    if (widget.isKader) ...[
-                      TextField(
-                        onChanged: (value) =>
-                            setState(() => _searchQuery = value),
-                        decoration: const InputDecoration(
-                          hintText: 'Cari nama anak atau NIK',
-                          prefixIcon: Icon(Icons.search_rounded),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8, bottom: 10),
+                    Expanded(
                       child: Text(
-                        widget.isKader
-                            ? 'Anak terdaftar (${_children.length})'
-                            : '${_children.length} anak terdaftar',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
+                        query.isEmpty
+                            ? '${_children.length} anak terdaftar'
+                            : '${visible.length} dari ${_children.length} anak',
+                        style: AppText.label.copyWith(
+                          color: AppColors.secondaryText,
                         ),
                       ),
                     ),
-                    if (_children.isEmpty) ...[
-                      const SizedBox(height: 22),
-                      Center(child: ChildAvatar(size: 60, faceColor: Color(0xFFF9C5E2))),
-                      const SizedBox(height: 12),
-                      Text(
-                        widget.isKader
-                            ? 'Belum ada data anak di Posyandu.'
-                            : 'Belum ada data anak',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        widget.isKader
-                            ? 'Data yang didaftarkan orang tua akan tampil di sini.'
-                            : 'Daftarkan identitas si kecil untuk mulai memantau.',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: AppColors.secondaryText),
-                      ),
-                      if (!widget.isKader) ...[
-                        const SizedBox(height: 16),
-                        FilledButton(
-                          onPressed: () => _showForm(),
-                          child: const Text('Tambahkan data anak'),
-                        ),
-                      ],
-                    ] else if (visibleChildren.isEmpty) ...[
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 28),
-                        child: Text(
-                          'Tidak ada anak yang cocok dengan pencarian.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: AppColors.secondaryText),
-                        ),
-                      ),
-                    ] else
-                      ...visibleChildren.map((child) {
-                        final name = child['nama'] as String? ?? 'Tanpa nama';
-                        final gender =
-                            child['jenis_kelamin'] as String? ?? '-';
-                        final birthDate =
-                            child['tanggal_lahir'] as String? ?? '-';
-                        final nik = child['nik'] as String? ?? '-';
-                        return Column(
-                          children: [
-                            ListTile(
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 2,
-                                vertical: 4,
-                              ),
-                              leading: ChildAvatar(
-                                size: 42,
-                                faceColor: name.hashCode.isEven
-                                    ? const Color(0xFFFFE78A)
-                                    : const Color(0xFFF9C5E2),
-                              ),
-                              title: Text(
-                                name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              subtitle: Text(
-                                '$gender • Lahir $birthDate\nNIK: $nik',
-                              ),
-                              isThreeLine: true,
-                              trailing: widget.isKader
-                                  ? Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        IconButton(
-                                          tooltip: 'Ubah',
-                                          onPressed: () =>
-                                              _showForm(child: child),
-                                          icon: Icon(
-                                            Icons.edit_outlined,
-                                            color: color,
-                                          ),
-                                        ),
-                                        IconButton(
-                                          tooltip: 'Hapus',
-                                          onPressed: () => _deleteChild(child),
-                                          icon: const Icon(
-                                            Icons.delete_outline,
-                                            color: AppColors.logoutForeground,
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  : const Icon(
-                                      Icons.chevron_right_rounded,
-                                      color: AppColors.secondaryText,
-                                    ),
-                            ),
-                            const Divider(
-                              color: AppColors.divider,
-                              height: 1,
-                              indent: 58,
-                            ),
-                          ],
-                        );
-                      }),
-                    if (!widget.isKader)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 16),
-                        child: OutlinedButton.icon(
-                          onPressed: () => _showForm(),
-                          icon: const Icon(Icons.add_circle_outline_rounded),
-                          label: const Text('Tambah anak baru'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: color,
-                            side: BorderSide(color: color.withValues(alpha: .4)),
-                            minimumSize: const Size.fromHeight(52),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(18),
-                            ),
-                          ),
-                        ),
-                      ),
+                    AppButton(
+                      label: 'Tambah anak',
+                      icon: Icons.add_rounded,
+                      expand: false,
+                      variant: AppButtonVariant.secondary,
+                      onPressed: () => _showForm(),
+                    ),
                   ],
                 ),
-        ),
-        bottomNavigationBar: AppBottomNav(
-          isKader: widget.isKader,
-          selectedIndex: 1,
-          onTap: (index) => _onNavigationTap(context, index),
+              ),
+              const SizedBox(height: AppSpace.sm),
+              Expanded(child: _buildKaderBody(visible, query)),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _parentProfileCard(Color color) {
-    final user = _supabase.auth.currentUser;
-    final rawName =
-        user?.userMetadata?['display_name'] ?? user?.userMetadata?['full_name'];
-    final parentName = rawName is String && rawName.trim().isNotEmpty
-        ? rawName.trim()
-        : 'Orang Tua / Wali';
-    return Container(
-      margin: const EdgeInsets.only(bottom: 18),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.parentSoft,
-        borderRadius: BorderRadius.circular(22),
+  Widget _buildKaderBody(List<Map<String, dynamic>> visible, String query) {
+    if (_isLoading) {
+      return const LoadingState(message: 'Memuat data anak');
+    }
+
+    if (_loadError != null) {
+      return ErrorState(message: _loadError!, onRetry: _loadChildren);
+    }
+
+    if (visible.isEmpty) {
+      return query.isEmpty
+          ? EmptyState(
+              icon: Icons.child_care_rounded,
+              title: 'Belum ada data anak di Posyandu',
+              message:
+                  'Anak yang didaftarkan orang tua akan tampil di sini. Anda juga bisa mendaftarkan anak lewat tombol Tambah anak.',
+              actionLabel: 'Tambah anak',
+              onAction: () => _showForm(),
+            )
+          : const EmptyState(
+              icon: Icons.search_off_rounded,
+              title: 'Tidak ada anak yang cocok',
+              message: 'Periksa kembali ejaan nama atau 16 digit NIK.',
+            );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadChildren,
+      child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpace.page,
+          AppSpace.xs,
+          AppSpace.page,
+          AppSpace.xl,
+        ),
+        itemCount: visible.length,
+        separatorBuilder: (_, _) => const SizedBox(height: AppSpace.md),
+        itemBuilder: (context, index) {
+          final child = visible[index];
+          final name = child['nama'] as String? ?? 'Tanpa nama';
+
+          return AppCard(
+            onTap: () => _openChildDetail(child),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpace.lg,
+              AppSpace.md,
+              AppSpace.xs,
+              AppSpace.md,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                InitialsAvatar(name: name, size: 44),
+                const SizedBox(width: AppSpace.md),
+                Expanded(
+                  child: _ChildInfo(
+                    name: name,
+                    gender: child['jenis_kelamin'] as String? ?? '-',
+                    birthDate: _tanggalTampil(child['tanggal_lahir'] as String?),
+                    nik: child['nik'] as String? ?? '-',
+                    showDetailHint: true,
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'Menu untuk $name',
+                  icon: const Icon(Icons.more_vert_rounded),
+                  onSelected: (value) {
+                    if (value == 'edit') {
+                      _showForm(child: child);
+                    } else {
+                      _deleteChild(child);
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_outlined),
+                          SizedBox(width: AppSpace.md),
+                          Text('Ubah data'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.delete_outline_rounded,
+                            color: AppStatus.danger.foreground,
+                          ),
+                          const SizedBox(width: AppSpace.md),
+                          Text(
+                            'Hapus data',
+                            style: TextStyle(color: AppStatus.danger.foreground),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
       ),
+    );
+  }
+
+  // ===========================================================================
+  // TAMPILAN ORANG TUA
+  // ===========================================================================
+  Widget _buildParent(BuildContext context) {
+    return Theme(
+      data: AppTheme.parent,
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Anak')),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () => _showForm(),
+          backgroundColor: AppColors.parent,
+          foregroundColor: Colors.white,
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Tambah anak'),
+        ),
+        body: _buildParentBody(),
+        bottomNavigationBar: AppBottomNav(
+          isKader: false,
+          selectedIndex: 1,
+          onTap: (index) => _onParentNavigationTap(context, index),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildParentBody() {
+    if (_isLoading) {
+      return const LoadingState(message: 'Memuat data anak');
+    }
+
+    if (_loadError != null) {
+      return ErrorState(message: _loadError!, onRetry: _loadChildren);
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadChildren,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpace.page,
+          AppSpace.md,
+          AppSpace.page,
+          96,
+        ),
+        children: [
+          _parentProfileCard(),
+          const SizedBox(height: AppSpace.xl),
+          SectionHeader(
+            title: 'Anak terdaftar',
+            subtitle: '${_children.length} anak',
+          ),
+          const SizedBox(height: AppSpace.md),
+          if (_children.isEmpty)
+            EmptyState(
+              icon: Icons.child_care_rounded,
+              title: 'Belum ada data anak',
+              message: 'Daftarkan identitas si kecil untuk mulai memantau.',
+              actionLabel: 'Tambahkan data anak',
+              onAction: () => _showForm(),
+            )
+          else
+            for (var i = 0; i < _children.length; i++) ...[
+              if (i > 0) const SizedBox(height: AppSpace.md),
+              _parentChildCard(_children[i]),
+            ],
+        ],
+      ),
+    );
+  }
+
+  Widget _parentChildCard(Map<String, dynamic> child) {
+    final name = child['nama'] as String? ?? 'Tanpa nama';
+
+    return AppCard(
+      onTap: () => _openChildDetail(child),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InitialsAvatar(name: name, size: 44),
+          const SizedBox(width: AppSpace.md),
+          Expanded(
+            child: _ChildInfo(
+              name: name,
+              gender: child['jenis_kelamin'] as String? ?? '-',
+              birthDate: _tanggalTampil(child['tanggal_lahir'] as String?),
+              nik: child['nik'] as String? ?? '-',
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.only(top: AppSpace.sm),
+            child: Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.secondaryText,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _parentProfileCard() {
+    final user = _supabase.auth.currentUser;
+    final parentName = displayNameFromUser(
+      user,
+      fallback: 'Orang Tua / Wali',
+    );
+
+    return AppCard(
+      color: AppColors.parentTint,
       child: Row(
         children: [
-          const ChildAvatar(
-            size: 42,
-            faceColor: Color(0xFFF9C5E2),
-          ),
-          const SizedBox(width: 10),
+          InitialsAvatar(name: parentName, size: 44),
+          const SizedBox(width: AppSpace.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  parentName,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-                const Text(
-                  'Orang Tua / Wali',
-                  style: TextStyle(color: AppColors.secondaryText, fontSize: 12),
-                ),
+                Text(parentName, style: AppText.subtitle),
+                Text('Orang Tua / Wali', style: AppText.caption),
                 Text(
                   user?.email ?? '-',
-                  style: const TextStyle(
+                  style: AppText.caption.copyWith(
                     color: AppColors.parent,
-                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -965,13 +573,402 @@ class _DataAnakPageState extends State<DataAnakPage> {
               context,
               MaterialPageRoute(builder: (_) => const ProfilPage()),
             ),
-            style: IconButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: color,
-            ),
-            icon: const Icon(Icons.edit_outlined, size: 18),
+            icon: const Icon(Icons.edit_outlined),
           ),
         ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.isKader ? _buildKader(context) : _buildParent(context);
+  }
+}
+
+// =============================================================================
+// RINCIAN ANAK (dipakai di daftar Kader dan Orang Tua)
+// =============================================================================
+class _ChildInfo extends StatelessWidget {
+  final String name;
+  final String gender;
+  final String birthDate;
+  final String nik;
+  final bool showDetailHint;
+
+  const _ChildInfo({
+    required this.name,
+    required this.gender,
+    required this.birthDate,
+    required this.nik,
+    this.showDetailHint = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(name, style: AppText.subtitle),
+        const SizedBox(height: 2),
+        Text('$gender • Lahir $birthDate', style: AppText.caption),
+        Text('NIK: $nik', style: AppText.caption),
+        if (showDetailHint) ...[
+          const SizedBox(height: AppSpace.sm),
+          Row(
+            children: [
+              Icon(Icons.monitor_heart_outlined, size: 18, color: scheme.primary),
+              const SizedBox(width: 6),
+              Text(
+                'Lihat perkembangan',
+                style: AppText.caption.copyWith(
+                  color: scheme.primary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// =============================================================================
+// LEMBAR FORM
+// =============================================================================
+class _ChildFormSheet extends StatefulWidget {
+  final Map<String, dynamic>? child;
+
+  const _ChildFormSheet({required this.child});
+
+  @override
+  State<_ChildFormSheet> createState() => _ChildFormSheetState();
+}
+
+class _ChildFormSheetState extends State<_ChildFormSheet> {
+  static const _genders = ['Laki-laki', 'Perempuan'];
+
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _nikCtrl;
+
+  DateTime? _birthDate;
+  String _gender = '';
+
+  bool _isSaving = false;
+  bool _autoValidate = false;
+  String? _birthError;
+  String? _genderError;
+  String? _errorMessage;
+
+  bool get _isEdit => widget.child != null;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final c = widget.child;
+
+    _nameCtrl = TextEditingController(text: c?['nama'] as String? ?? '');
+    _nikCtrl = TextEditingController(text: c?['nik'] as String? ?? '');
+
+    final rawBirth = c?['tanggal_lahir'] as String?;
+    if (rawBirth != null && rawBirth.isNotEmpty) {
+      _birthDate = DateTime.tryParse(rawBirth);
+    }
+
+    // Anak baru: jenis kelamin TIDAK terisi bawaan (sebelumnya "Perempuan").
+    final rawGender = c?['jenis_kelamin'] as String?;
+    if (rawGender != null && _genders.contains(rawGender)) {
+      _gender = rawGender;
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _nikCtrl.dispose();
+    super.dispose();
+  }
+
+  String? _validateNik(String? value) {
+    final nik = value ?? '';
+    if (nik.isEmpty) return 'NIK wajib diisi.';
+    if (!RegExp(r'^\d{16}$').hasMatch(nik)) {
+      return 'NIK harus terdiri dari 16 digit angka (sekarang ${nik.length}).';
+    }
+    return null;
+  }
+
+  Future<void> _pickBirthDate() async {
+    final now = DateTime.now();
+    var initial = _birthDate ?? now;
+    if (initial.isAfter(now)) initial = now;
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(1900),
+      lastDate: now,
+    );
+
+    if (picked != null && mounted) {
+      setState(() {
+        _birthDate = picked;
+        _birthError = null;
+      });
+    }
+  }
+
+  Future<void> _save() async {
+    FocusScope.of(context).unfocus();
+    setState(() => _errorMessage = null);
+
+    final formOk = _formKey.currentState!.validate();
+    final birthOk = _birthDate != null;
+    final genderOk = _gender.isNotEmpty;
+
+    setState(() {
+      _birthError = birthOk ? null : 'Pilih tanggal lahir.';
+      _genderError = genderOk ? null : 'Pilih jenis kelamin.';
+      if (!formOk || !birthOk || !genderOk) _autoValidate = true;
+    });
+
+    if (!formOk || !birthOk || !genderOk) return;
+
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      setState(
+        () => _errorMessage = 'Sesi login berakhir. Silakan masuk kembali.',
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    final birth = _birthDate!;
+    final data = <String, dynamic>{
+      'nama': _nameCtrl.text.trim(),
+      'nik': _nikCtrl.text,
+      'tanggal_lahir':
+          '${birth.year.toString().padLeft(4, '0')}-'
+          '${birth.month.toString().padLeft(2, '0')}-'
+          '${birth.day.toString().padLeft(2, '0')}',
+      'jenis_kelamin': _gender,
+    };
+
+    try {
+      final supabase = Supabase.instance.client;
+
+      if (widget.child == null) {
+        await supabase.from('anak').insert({...data, 'user_id': user.id});
+      } else {
+        await supabase
+            .from('anak')
+            .update(data)
+            .eq('id', widget.child!['id']);
+      }
+
+      if (!mounted) return;
+
+      final nama = data['nama'] as String;
+      Navigator.pop(
+        context,
+        _isEdit
+            ? 'Perubahan data $nama disimpan.'
+            : '$nama berhasil didaftarkan.',
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _isSaving = false;
+        _errorMessage = friendlyError(
+          error,
+          fallback:
+              'Data anak belum tersimpan. Periksa koneksi internet, lalu coba lagi.',
+        );
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final inset = MediaQuery.viewInsetsOf(context).bottom;
+    final height = MediaQuery.sizeOf(context).height;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: inset),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: height * 0.92),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Kepala
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpace.page,
+                0,
+                AppSpace.sm,
+                AppSpace.sm,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Semantics(
+                          header: true,
+                          child: Text(
+                            _isEdit ? 'Ubah data anak' : 'Daftarkan si kecil',
+                            style: AppText.title,
+                          ),
+                        ),
+                        Text(
+                          'Isi identitas anak dengan teliti.',
+                          style: AppText.caption,
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Tutup',
+                    onPressed: _isSaving ? null : () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+            ),
+
+            // Isi
+            Flexible(
+              child: SingleChildScrollView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpace.page,
+                  AppSpace.sm,
+                  AppSpace.page,
+                  AppSpace.lg,
+                ),
+                child: Form(
+                  key: _formKey,
+                  autovalidateMode: _autoValidate
+                      ? AutovalidateMode.onUserInteraction
+                      : AutovalidateMode.disabled,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      AppTextField(
+                        label: 'Nama anak',
+                        controller: _nameCtrl,
+                        prefixIcon: Icons.child_care_outlined,
+                        textCapitalization: TextCapitalization.words,
+                        textInputAction: TextInputAction.next,
+                        validator: (v) => validateRequired(v, 'Nama anak'),
+                      ),
+                      const SizedBox(height: AppSpace.lg),
+
+                      AppTextField(
+                        label: 'NIK',
+                        controller: _nikCtrl,
+                        helper: 'Terdiri dari 16 digit angka.',
+                        prefixIcon: Icons.badge_outlined,
+                        keyboardType: TextInputType.number,
+                        textInputAction: TextInputAction.done,
+                        maxLength: 16,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        validator: _validateNik,
+                      ),
+                      const SizedBox(height: AppSpace.md),
+
+                      Text('Tanggal lahir', style: AppText.label),
+                      const SizedBox(height: 6),
+                      AppPickerTile(
+                        icon: Icons.calendar_month_outlined,
+                        value: _birthDate == null
+                            ? 'Pilih tanggal lahir'
+                            : tanggalLengkap(_birthDate!),
+                        isPlaceholder: _birthDate == null,
+                        semanticLabel: _birthDate == null
+                            ? 'Tanggal lahir belum dipilih. Pilih tanggal lahir'
+                            : 'Tanggal lahir ${tanggalLengkap(_birthDate!)}. Ubah tanggal',
+                        onTap: _pickBirthDate,
+                      ),
+                      if (_birthError != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          _birthError!,
+                          style: AppText.caption.copyWith(
+                            color: AppStatus.danger.foreground,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: AppSpace.lg),
+
+                      Text('Jenis kelamin', style: AppText.label),
+                      const SizedBox(height: AppSpace.sm),
+                      ChoiceChipGroup(
+                        options: _genders,
+                        selected: _gender,
+                        onChanged: (value) {
+                          setState(() {
+                            _gender = value;
+                            if (value.isNotEmpty) _genderError = null;
+                          });
+                        },
+                      ),
+                      if (_genderError != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          _genderError!,
+                          style: AppText.caption.copyWith(
+                            color: AppStatus.danger.foreground,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // Kaki
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpace.page,
+                AppSpace.sm,
+                AppSpace.page,
+                AppSpace.lg,
+              ),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_errorMessage != null) ...[
+                      InlineMessage(message: _errorMessage!),
+                      const SizedBox(height: AppSpace.md),
+                    ],
+                    AppButton(
+                      label: _isEdit ? 'Simpan perubahan' : 'Daftarkan anak',
+                      onPressed: _save,
+                      isLoading: _isSaving,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
