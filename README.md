@@ -22,7 +22,7 @@ Project ini dikembangkan sebagai bagian dari mata kuliah **Mobile Programming 2*
 
 ## 👥 Tim Pengembang
 
-**Kelompok ... | Mobile Programming 2**
+**Kelompok 2 | Mobile Programming 2**
 
 | No | Nama | NIM |
 | :---: | :--- | :---: |
