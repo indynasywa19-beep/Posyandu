@@ -1,17 +1,41 @@
-# si_posyandu
+<div align="center">
 
-A new Flutter project.
+# SI-POSYANDU
 
-## Getting Started
+### Sistem Informasi Pelayanan Posyandu Digital
 
-This project is a starting point for a Flutter application.
+Aplikasi mobile untuk membantu kader dan orang tua dalam pencatatan pemeriksaan, imunisasi, jadwal kegiatan, serta pemantauan tumbuh kembang balita.
 
-A few resources to get you started if this is your first Flutter project:
+![Flutter](https://img.shields.io/badge/Flutter-3.44.1-02569B?style=for-the-badge&logo=flutter&logoColor=white)
+![Dart](https://img.shields.io/badge/Dart-3.x-0175C2?style=for-the-badge&logo=dart&logoColor=white)
+![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+</div>
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+---
+
+## 📋 Tentang Project
+
+**SI-POSYANDU** adalah aplikasi berbasis mobile yang dirancang untuk mempermudah kader Posyandu dalam mengelola data anak, jadwal pemeriksaan, dan riwayat imunisasi, sekaligus memudahkan orang tua memantau perkembangan balita secara terpusat dan real-time.
+
+Project ini dikembangkan sebagai bagian dari mata kuliah **Mobile Programming 2**.
+
+## 👥 Tim Pengembang
+
+**Kelompok ... | Mobile Programming 2**
+
+| No | Nama | NIM |
+| :---: | :--- | :---: |
+| 1 | Mecca Aulia Utami | 19240716 |
+| 2 | Indy Nasywa | 19241934 |
+| 3 | Iza Shabira | 19242232 |
+| 4 | Nur Aini | 19242030 |
+| 5 | Nero Azis Saputra | 19240522 |
+
+## 🛠️ Tech Stack
+
+| Layer | Teknologi |
+| :--- | :--- |
+| **Frontend** | Flutter 3.44.1 · Dart |
+| **Backend & Auth** | Supabase |
+| **Database** | PostgreSQL (Supabase) |
