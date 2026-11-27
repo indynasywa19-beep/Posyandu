@@ -5,11 +5,30 @@ import 'design_tokens.dart';
 
 class LogoutButton extends StatelessWidget {
   final VoidCallback onPressed;
+  final bool inverted;
 
-  const LogoutButton({super.key, required this.onPressed});
+  const LogoutButton({super.key, required this.onPressed, this.inverted = false});
 
   @override
   Widget build(BuildContext context) {
+    if (inverted) {
+      return Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+        ),
+        child: IconButton(
+          tooltip: 'Keluar akun',
+          onPressed: onPressed,
+          padding: EdgeInsets.zero,
+          icon: const Icon(Icons.logout_rounded, size: 20, color: Colors.white),
+        ),
+      );
+    }
+
     return IconButton(
       tooltip: 'Keluar akun',
       onPressed: onPressed,
@@ -22,9 +41,7 @@ class LogoutButton extends StatelessWidget {
   }
 }
 
-/// Navigasi bawah untuk Orang Tua (5 tab) dan, bila [isKader] true, varian
-/// Kader dengan aksi "Catat gizi" di tengah. Nama dan parameter tidak berubah
-/// agar semua halaman pemanggil tetap berfungsi.
+/// Navigasi bawah untuk Orang Tua (5 tab: Beranda, Anak, Jadwal, Riwayat, Profil).
 class AppBottomNav extends StatelessWidget {
   final bool isKader;
   final int selectedIndex;
@@ -44,8 +61,8 @@ class AppBottomNav extends StatelessWidget {
       label: 'Beranda',
     ),
     NavDestination(
-      icon: Icons.child_care_outlined,
-      selectedIcon: Icons.child_care_rounded,
+      icon: Icons.people_outline_rounded,
+      selectedIcon: Icons.people_rounded,
       label: 'Anak',
     ),
     NavDestination(
@@ -54,9 +71,9 @@ class AppBottomNav extends StatelessWidget {
       label: 'Jadwal',
     ),
     NavDestination(
-      icon: Icons.article_outlined,
-      selectedIcon: Icons.article_rounded,
-      label: 'Artikel',
+      icon: Icons.access_time_rounded,
+      selectedIcon: Icons.access_time_filled_rounded,
+      label: 'Riwayat',
     ),
     NavDestination(
       icon: Icons.person_outline_rounded,

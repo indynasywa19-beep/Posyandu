@@ -88,13 +88,31 @@ abstract final class AppTheme {
       textTheme: textTheme,
 
       appBarTheme: AppBarTheme(
-        backgroundColor: role.background,
-        foregroundColor: AppColors.text,
-        surfaceTintColor: Colors.transparent,
+        backgroundColor: role == RolePalette.kader
+            ? AppColors.surface
+            : AppColors.navy,
+        foregroundColor: role == RolePalette.kader
+            ? AppColors.text
+            : Colors.white,
+        iconTheme: IconThemeData(
+          color: role == RolePalette.kader
+              ? AppColors.text
+              : Colors.white,
+        ),
+        titleTextStyle: AppText.title.copyWith(
+          color: role == RolePalette.kader
+              ? AppColors.text
+              : Colors.white,
+          fontSize: 18,
+          fontWeight: FontWeight.w800,
+        ),
         elevation: 0,
         scrolledUnderElevation: 0,
-        centerTitle: false,
-        titleTextStyle: AppText.title,
+        shape: role == RolePalette.kader
+            ? const Border(
+                bottom: BorderSide(color: AppColors.divider, width: 1),
+              )
+            : null,
       ),
 
       cardTheme: CardThemeData(

@@ -9,13 +9,11 @@ import '../widgets/app_theme.dart';
 import '../widgets/app_widgets.dart';
 import '../widgets/design_tokens.dart';
 import '../widgets/kader_widgets.dart';
-import 'artikel_page.dart';
 import 'data_anak_page.dart';
-import 'home_kader_page.dart';
 import 'home_ortu_page.dart';
 import 'login_page.dart';
-import 'pemeriksaan_page.dart';
 import 'profil_page.dart';
+import 'riwayat_page.dart';
 
 class JadwalPage extends StatefulWidget {
   final bool isKader;
@@ -29,7 +27,7 @@ class JadwalPage extends StatefulWidget {
 class _JadwalPageState extends State<JadwalPage> {
   final _supabase = Supabase.instance.client;
 
-  List<Map<String, dynamic>> _schedules = [];
+  List _schedules = [];
   bool _isLoading = true;
   String? _loadError;
 
@@ -73,16 +71,13 @@ class _JadwalPageState extends State<JadwalPage> {
     }
   }
 
-  /// Memisahkan jadwal yang akan datang (hari ini dan sesudahnya) dari yang
-  /// sudah lewat. Jadwal yang sudah lewat diurutkan dari yang terbaru.
-  ({List<Map<String, dynamic>> upcoming, List<Map<String, dynamic>> past})
-  _grouped() {
+  ({List upcoming, List past}) _grouped() {
     final today = DateUtils.dateOnly(DateTime.now());
-    final upcoming = <Map<String, dynamic>>[];
-    final past = <Map<String, dynamic>>[];
+    final upcoming = [];
+    final past = [];
 
     for (final schedule in _schedules) {
-      final date = DateTime.tryParse(schedule['tanggal'] as String? ?? '');
+      final date = DateTime.tryParse(schedule['tanggal']?.toString() ?? '');
 
       if (date != null && DateUtils.dateOnly(date).isBefore(today)) {
         past.add(schedule);
@@ -114,18 +109,47 @@ class _JadwalPageState extends State<JadwalPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // FORM TAMBAH / UBAH
+  // FORM TAMBAH / UBAH (Dialog Tengah di Web, BottomSheet di HP)
   // ---------------------------------------------------------------------------
-  Future<void> _editSchedule({Map<String, dynamic>? schedule}) async {
-    final message = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (_) => Theme(
-        data: AppTheme.kader,
-        child: _ScheduleFormSheet(schedule: schedule),
-      ),
-    );
+  Future<void> _editSchedule({Map? schedule}) async {
+    final String? message;
+
+    if (widget.isKader) {
+      message = await showDialog<String>(
+        context: context,
+        builder: (_) => Theme(
+          data: AppTheme.kader,
+          child: Dialog(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: 32,
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 500),
+              child: Padding(
+                padding: const EdgeInsets.only(top: 20),
+                child: _ScheduleFormSheet(schedule: schedule),
+              ),
+            ),
+          ),
+        ),
+      );
+    } else {
+      message = await showModalBottomSheet<String>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (_) => Theme(
+          data: AppTheme.kader,
+          child: _ScheduleFormSheet(schedule: schedule),
+        ),
+      );
+    }
 
     if (!mounted || message == null) return;
 
@@ -136,9 +160,9 @@ class _JadwalPageState extends State<JadwalPage> {
   // ---------------------------------------------------------------------------
   // HAPUS
   // ---------------------------------------------------------------------------
-  Future<void> _deleteSchedule(Map<String, dynamic> schedule) async {
-    final tanggal = _tanggalTampil(schedule['tanggal'] as String?);
-    final lokasi = schedule['lokasi'] as String? ?? '-';
+  Future<void> _deleteSchedule(Map schedule) async {
+    final tanggal = _tanggalTampil(schedule['tanggal']?.toString());
+    final lokasi = schedule['lokasi']?.toString() ?? '-';
 
     final confirmed = await showConfirmDialog(
       context,
@@ -205,13 +229,16 @@ class _JadwalPageState extends State<JadwalPage> {
     final Widget? page = switch (index) {
       0 => const HomeOrtuPage(),
       1 => const DataAnakPage(),
-      3 => const ArtikelPage(),
+      3 => const RiwayatPage(),
       4 => const ProfilPage(),
       _ => null,
     };
 
     if (page != null) {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => page),
+      );
     }
   }
 
@@ -219,7 +246,6 @@ class _JadwalPageState extends State<JadwalPage> {
   // ISI BERSAMA (Kader dan Orang Tua)
   // ---------------------------------------------------------------------------
   Widget _scrollableState(Widget child) {
-    // Dibungkus agar tarik-untuk-memperbarui tetap berfungsi di keadaan kosong.
     return LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -231,52 +257,58 @@ class _JadwalPageState extends State<JadwalPage> {
     );
   }
 
-  Widget _buildBody({required bool isKader}) {
+Widget _buildBody({required bool isKader}) {
     if (_isLoading) {
-      return const LoadingState(message: 'Memuat jadwal');
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 40),
+        child: LoadingState(message: 'Memuat jadwal'),
+      );
     }
 
     if (_loadError != null) {
-      return ErrorState(
-        title: 'Jadwal belum bisa dimuat',
-        message: _loadError!,
-        onRetry: _loadSchedules,
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: ErrorState(
+          title: 'Jadwal belum bisa dimuat',
+          message: _loadError!,
+          onRetry: _loadSchedules,
+        ),
       );
     }
 
     if (_schedules.isEmpty) {
-      return RefreshIndicator(
-        onRefresh: _loadSchedules,
-        child: _scrollableState(
-          isKader
-              ? EmptyState(
-                  icon: Icons.event_busy_outlined,
-                  title: 'Belum ada jadwal Posyandu',
-                  message: 'Tambahkan jadwal agar orang tua tahu kapan dan di mana kegiatan berlangsung.',
-                  actionLabel: 'Tambah jadwal',
-                  onAction: () => _editSchedule(),
-                )
-              : const EmptyState(
-                  icon: Icons.event_busy_outlined,
-                  title: 'Belum ada jadwal Posyandu',
-                  message: 'Jadwal dibuat oleh Kader. Tarik layar ke bawah untuk memperbarui.',
-                ),
-        ),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: isKader
+            ? EmptyState(
+                icon: Icons.event_busy_outlined,
+                title: 'Belum ada jadwal Posyandu',
+                message:
+                    'Tambahkan jadwal agar orang tua tahu kapan dan di mana kegiatan berlangsung.',
+                actionLabel: 'Tambah jadwal',
+                onAction: () => _editSchedule(),
+              )
+            : const EmptyState(
+                icon: Icons.event_busy_outlined,
+                title: 'Belum ada jadwal Posyandu',
+                message:
+                    'Jadwal dibuat oleh Kader. Tarik layar ke bawah untuk memperbarui.',
+              ),
       );
     }
 
     final groups = _grouped();
     final today = DateUtils.dateOnly(DateTime.now());
 
-    Widget cardFor(Map<String, dynamic> schedule, {required bool isPast}) {
-      final rawDate = schedule['tanggal'] as String? ?? '';
+    Widget cardFor(Map schedule, {required bool isPast}) {
+      final rawDate = schedule['tanggal']?.toString() ?? '';
       final date = DateTime.tryParse(rawDate);
 
       return _ScheduleCard(
         date: date,
         dateText: _tanggalTampil(rawDate),
-        timeText: _waktuTampil(schedule['waktu'] as String?),
-        location: schedule['lokasi'] as String? ?? '-',
+        timeText: _waktuTampil(schedule['waktu']?.toString()),
+        location: schedule['lokasi']?.toString() ?? '-',
         isPast: isPast,
         isToday: date != null && DateUtils.dateOnly(date) == today,
         onEdit: isKader ? () => _editSchedule(schedule: schedule) : null,
@@ -284,64 +316,57 @@ class _JadwalPageState extends State<JadwalPage> {
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: _loadSchedules,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(
-          AppSpace.page,
-          AppSpace.sm,
-          AppSpace.page,
-          AppSpace.xl,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SectionHeader(
+          title: 'Akan datang',
+          subtitle: groups.upcoming.isEmpty
+              ? null
+              : '${groups.upcoming.length} jadwal',
         ),
-        children: [
+        const SizedBox(height: AppSpace.md),
+        if (groups.upcoming.isEmpty)
+          Text(
+            'Belum ada jadwal yang akan datang.',
+            style: AppText.body.copyWith(color: AppColors.secondaryText),
+          )
+        else
+          for (var i = 0; i < groups.upcoming.length; i++) ...[
+            if (i > 0) const SizedBox(height: AppSpace.md),
+            cardFor(groups.upcoming[i] as Map, isPast: false),
+          ],
+
+        if (groups.past.isNotEmpty) ...[
+          const SizedBox(height: AppSpace.xl),
           SectionHeader(
-            title: 'Akan datang',
-            subtitle: groups.upcoming.isEmpty
-                ? null
-                : '${groups.upcoming.length} jadwal',
+            title: 'Sudah lewat',
+            subtitle: '${groups.past.length} jadwal',
           ),
           const SizedBox(height: AppSpace.md),
-          if (groups.upcoming.isEmpty)
-            Text(
-              'Belum ada jadwal yang akan datang.',
-              style: AppText.body.copyWith(color: AppColors.secondaryText),
-            )
-          else
-            for (var i = 0; i < groups.upcoming.length; i++) ...[
-              if (i > 0) const SizedBox(height: AppSpace.md),
-              cardFor(groups.upcoming[i], isPast: false),
-            ],
-
-          if (groups.past.isNotEmpty) ...[
-            const SizedBox(height: AppSpace.xl),
-            SectionHeader(
-              title: 'Sudah lewat',
-              subtitle: '${groups.past.length} jadwal',
-            ),
-            const SizedBox(height: AppSpace.md),
-            for (var i = 0; i < groups.past.length; i++) ...[
-              if (i > 0) const SizedBox(height: AppSpace.md),
-              cardFor(groups.past[i], isPast: true),
-            ],
-          ],
-
-          if (!isKader) ...[
-            const SizedBox(height: AppSpace.xl),
-            const SectionHeader(title: 'Kegiatan layanan'),
-            const SizedBox(height: AppSpace.sm),
-            _activity(Icons.monitor_weight_outlined, 'Penimbangan'),
-            _activity(Icons.height_rounded, 'Pengukuran tinggi badan'),
-            _activity(Icons.vaccines_outlined, 'Imunisasi'),
-            _activity(
-              Icons.medical_services_outlined,
-              'Pemeriksaan kesehatan',
-            ),
+          for (var i = 0; i < groups.past.length; i++) ...[
+            if (i > 0) const SizedBox(height: AppSpace.md),
+            cardFor(groups.past[i] as Map, isPast: true),
           ],
         ],
-      ),
+
+        if (!isKader) ...[
+          const SizedBox(height: AppSpace.xl),
+          const SectionHeader(title: 'Kegiatan layanan'),
+          const SizedBox(height: AppSpace.sm),
+          _activity(Icons.monitor_weight_outlined, 'Penimbangan'),
+          _activity(Icons.height_rounded, 'Pengukuran tinggi badan'),
+          _activity(Icons.vaccines_outlined, 'Imunisasi'),
+          _activity(
+            Icons.medical_services_outlined,
+            'Pemeriksaan kesehatan',
+          ),
+        ],
+      ],
     );
   }
+
+    
 
   Widget _activity(IconData icon, String title) {
     return Padding(
@@ -365,83 +390,98 @@ class _JadwalPageState extends State<JadwalPage> {
   }
 
   // ===========================================================================
-  // TAMPILAN KADER
+  // TAMPILAN KADER (Layout Web)
   // ===========================================================================
   Widget _buildKader(BuildContext context) {
-    return Theme(
-      data: AppTheme.kader,
-      child: Scaffold(
-        floatingActionButton: KaderCenterFab(
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const PemeriksaanPage(openFormOnStart: true),
-            ),
-          ),
-        ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-        bottomNavigationBar: KaderBottomAppBar(
-          selectedIndex: 2,
-          onTabSelected: (index) {
-            final Widget? page = switch (index) {
-              0 => const HomeKaderPage(),
-              1 => const DataAnakPage(isKader: true),
-              3 => const ProfilPage(),
-              _ => null,
-            };
+    final isMobile = MediaQuery.sizeOf(context).width < 600;
 
-            if (page != null) {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => page),
-              );
-            }
-          },
-        ),
-        body: SafeArea(
+    return KaderWebScaffold(
+      activeIndex: 4,
+      breadcrumb: 'Beranda / Jadwal Posyandu',
+      body: Padding(
+        padding: EdgeInsets.all(isMobile ? 16 : 24),
+        child: Container(
+          padding: EdgeInsets.all(isMobile ? 16 : 24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.divider),
+          ),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpace.sm,
-                  AppSpace.md,
-                  AppSpace.sm,
-                  AppSpace.sm,
+              if (isMobile) ...[
+                Text(
+                  'Jadwal Posyandu',
+                  style: AppText.title.copyWith(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.text,
+                  ),
                 ),
-                child: KaderTopBar(
-                  title: 'Jadwal Posyandu',
-                  subtitle: _subtitle(),
-                  onBack: () => Navigator.maybePop(context),
-                  trailing: KaderLogoutButton(onPressed: _logout),
+                const SizedBox(height: 2),
+                Text(
+                  _subtitle(),
+                  style: AppText.caption.copyWith(
+                    color: AppColors.secondaryText,
+                  ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpace.page,
-                  0,
-                  AppSpace.page,
-                  AppSpace.sm,
+                const SizedBox(height: 14),
+                FilledButton.icon(
+                  onPressed: () => _editSchedule(),
+                  icon: const Icon(Icons.add_rounded, size: 20),
+                  label: const Text('Tambah jadwal'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.navy,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    minimumSize: const Size.fromHeight(48),
+                  ),
                 ),
-                child: Row(
+              ] else
+                Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        'Kelola jadwal dan lokasi kegiatan Posyandu.',
-                        style: AppText.caption,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Jadwal Posyandu',
+                            style: AppText.title.copyWith(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.text,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _subtitle(),
+                            style: AppText.caption.copyWith(
+                              color: AppColors.secondaryText,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: AppSpace.sm),
-                    AppButton(
-                      label: 'Tambah jadwal',
-                      icon: Icons.add_rounded,
-                      expand: false,
-                      variant: AppButtonVariant.secondary,
+                    FilledButton.icon(
                       onPressed: () => _editSchedule(),
+                      icon: const Icon(Icons.add_rounded, size: 20),
+                      label: const Text('Tambah jadwal'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.navy,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        minimumSize: const Size(140, 48),
+                      ),
                     ),
                   ],
                 ),
-              ),
-              Expanded(child: _buildBody(isKader: true)),
+              const SizedBox(height: 20),
+              _buildBody(isKader: true),
             ],
           ),
         ),
@@ -457,49 +497,56 @@ class _JadwalPageState extends State<JadwalPage> {
       data: AppTheme.parent,
       child: Scaffold(
         appBar: AppBar(title: const Text('Jadwal Posyandu')),
-        body: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpace.page,
-                0,
-                AppSpace.page,
-                AppSpace.xs,
-              ),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(_subtitle(), style: AppText.caption),
-              ),
+        body: RefreshIndicator(
+          onRefresh: _loadSchedules,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpace.page,
+              AppSpace.lg,
+              AppSpace.page,
+              100,
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpace.page,
-                AppSpace.xs,
-                AppSpace.page,
-                AppSpace.sm,
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.lock_outline_rounded,
-                    size: 16,
-                    color: AppColors.parent,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(_subtitle(), style: AppText.caption),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
                   ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'Hanya bisa dilihat · dibuat oleh Kader',
-                      style: AppText.caption.copyWith(
-                        color: AppColors.parent,
-                        fontWeight: FontWeight.w700,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.lock_outline_rounded,
+                        size: 16,
+                        color: AppColors.navy,
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Hanya bisa dilihat · dibuat oleh Kader',
+                          style: AppText.caption.copyWith(
+                            color: AppColors.navy,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: AppSpace.lg),
+                _buildBody(isKader: false),
+              ],
             ),
-            Expanded(child: _buildBody(isKader: false)),
-          ],
+          ),
         ),
         bottomNavigationBar: AppBottomNav(
           isKader: false,
@@ -527,7 +574,6 @@ class _ScheduleCard extends StatelessWidget {
   final bool isPast;
   final bool isToday;
 
-  /// Diisi hanya untuk Kader.
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
 
@@ -563,7 +609,6 @@ class _ScheduleCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Lencana tanggal
           Container(
             width: 56,
             padding: const EdgeInsets.symmetric(vertical: AppSpace.sm),
@@ -679,7 +724,7 @@ class _ScheduleCard extends StatelessWidget {
 // LEMBAR FORM
 // =============================================================================
 class _ScheduleFormSheet extends StatefulWidget {
-  final Map<String, dynamic>? schedule;
+  final Map? schedule;
 
   const _ScheduleFormSheet({required this.schedule});
 
@@ -708,14 +753,14 @@ class _ScheduleFormSheetState extends State<_ScheduleFormSheet> {
 
     final s = widget.schedule;
 
-    _locationCtrl = TextEditingController(text: s?['lokasi'] as String? ?? '');
+    _locationCtrl = TextEditingController(text: s?['lokasi']?.toString() ?? '');
 
-    final rawDate = s?['tanggal'] as String?;
+    final rawDate = s?['tanggal']?.toString();
     if (rawDate != null && rawDate.isNotEmpty) {
       _date = DateTime.tryParse(rawDate);
     }
 
-    final rawTime = s?['waktu'] as String?;
+    final rawTime = s?['waktu']?.toString();
     if (rawTime != null) {
       final match = RegExp(r'^(\d{1,2}):(\d{2})').firstMatch(rawTime);
       if (match != null) {
@@ -846,7 +891,7 @@ class _ScheduleFormSheetState extends State<_ScheduleFormSheet> {
     return Padding(
       padding: EdgeInsets.only(bottom: inset),
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: height * 0.92),
+        constraints: BoxConstraints(maxHeight: height * 0.88),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,

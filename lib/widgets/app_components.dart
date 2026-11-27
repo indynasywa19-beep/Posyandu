@@ -975,3 +975,318 @@ class ChoiceChipGroup extends StatelessWidget {
     );
   }
 }
+
+// =============================================================================
+// LOGO & BADGE RESMI SI-POSYANDU
+// =============================================================================
+
+/// Ikon Logo SI-POSYANDU: Lingkaran kuning (#F59E0B) dirangkul dua daun,
+/// daun kiri biru (#155EEF) dan daun kanan hijau (#15803D).
+class SiPosyanduLogoIcon extends StatelessWidget {
+  final double size;
+
+  const SiPosyanduLogoIcon({super.key, this.size = 36});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _SiPosyanduLogoPainter(),
+      ),
+    );
+  }
+}
+
+class _SiPosyanduLogoPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final cx = w / 2;
+
+    // 1. Lingkaran kuning/oranye di atas (#F59E0B)
+    final yellowPaint = Paint()
+      ..color = AppColors.logoYellow
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+
+    final circleCenter = Offset(cx, h * 0.28);
+    final circleRadius = w * 0.16;
+    canvas.drawCircle(circleCenter, circleRadius, yellowPaint);
+
+    // 2. Daun Kiri - Biru (#155EEF)
+    final bluePaint = Paint()
+      ..color = AppColors.logoBlue
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+
+    final leftPath = Path();
+    leftPath.moveTo(cx - w * 0.025, h * 0.88);
+    leftPath.cubicTo(
+      cx - w * 0.35,
+      h * 0.82,
+      cx - w * 0.52,
+      h * 0.52,
+      cx - w * 0.44,
+      h * 0.26,
+    );
+    leftPath.quadraticBezierTo(
+      cx - w * 0.36,
+      h * 0.22,
+      cx - w * 0.32,
+      h * 0.28,
+    );
+    leftPath.cubicTo(
+      cx - w * 0.25,
+      h * 0.44,
+      cx - w * 0.12,
+      h * 0.58,
+      cx - w * 0.025,
+      h * 0.88,
+    );
+    leftPath.close();
+    canvas.drawPath(leftPath, bluePaint);
+
+    // 3. Daun Kanan - Hijau (#15803D)
+    final greenPaint = Paint()
+      ..color = AppColors.logoGreen
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+
+    final rightPath = Path();
+    rightPath.moveTo(cx + w * 0.025, h * 0.88);
+    rightPath.cubicTo(
+      cx + w * 0.35,
+      h * 0.82,
+      cx + w * 0.52,
+      h * 0.52,
+      cx + w * 0.44,
+      h * 0.26,
+    );
+    rightPath.quadraticBezierTo(
+      cx + w * 0.36,
+      h * 0.22,
+      cx + w * 0.32,
+      h * 0.28,
+    );
+    rightPath.cubicTo(
+      cx + w * 0.25,
+      h * 0.44,
+      cx + w * 0.12,
+      h * 0.58,
+      cx + w * 0.025,
+      h * 0.88,
+    );
+    rightPath.close();
+    canvas.drawPath(rightPath, greenPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// Widget merek lengkap SI-POSYANDU dengan teks pendukung.
+class SiPosyanduBrand extends StatelessWidget {
+  final double iconSize;
+  final bool showGovHeader;
+  final bool showSubtitle;
+  final Color? textColor;
+  final Color? govColor;
+  final bool isVertical;
+
+  const SiPosyanduBrand({
+    super.key,
+    this.iconSize = 34,
+    this.showGovHeader = true,
+    this.showSubtitle = false,
+    this.textColor,
+    this.govColor,
+    this.isVertical = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final titleColor = textColor ?? AppColors.textNavy;
+    final subColor = govColor ?? (textColor != null ? textColor!.withValues(alpha: 0.8) : AppColors.secondaryText);
+
+ if (isVertical) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SiPosyanduLogoIcon(size: iconSize),
+          const SizedBox(height: AppSpace.sm + 2),
+          Text(
+            'SI-POSYANDU',
+            textAlign: TextAlign.center,
+            style: AppText.headline.copyWith(
+              color: titleColor,
+              letterSpacing: 0.8,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          if (showSubtitle) ...[
+            const SizedBox(height: 2),
+            Text(
+              'Sistem Informasi Posyandu',
+              textAlign: TextAlign.center,
+              style: AppText.body.copyWith(color: subColor),
+            ),
+          ],
+          if (showGovHeader) ...[
+            const SizedBox(height: 4),
+            Text(
+              'PELAYANAN KESEHATAN TERPADU · POSYANDU',
+              textAlign: TextAlign.center,
+              style: AppText.caption.copyWith(
+                color: subColor,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
+                fontSize: 10,
+              ),
+            ),
+          ],
+        ],
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        SiPosyanduLogoIcon(size: iconSize),
+        const SizedBox(width: AppSpace.sm + 2),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (showGovHeader)
+              Text(
+                'PELAYANAN KESEHATAN TERPADU',
+                style: AppText.caption.copyWith(
+                  color: subColor,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            Text(
+              'SI-POSYANDU',
+              style: AppText.title.copyWith(
+                color: titleColor,
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.5,
+              ),
+            ),
+            if (showSubtitle)
+              Text(
+                'Sistem Informasi Posyandu',
+                style: AppText.caption.copyWith(
+                  color: subColor,
+                  fontSize: 11,
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Badge Peran KADER (latar biru lembut #DBEAFE, teks biru navy #0D3B66).
+class KaderBadge extends StatelessWidget {
+  const KaderBadge({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFDBEAFE),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Text(
+        'KADER',
+        style: AppText.caption.copyWith(
+          color: AppColors.navy,
+          fontWeight: FontWeight.w900,
+          fontSize: 11,
+          letterSpacing: 0.8,
+        ),
+      ),
+    );
+  }
+}
+
+/// Badge Peran ORANG TUA (latar hijau lembut #DCFCE7, teks hijau tua #15803D).
+class OrtuBadge extends StatelessWidget {
+  const OrtuBadge({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFDCFCE7),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Text(
+        'ORANG TUA',
+        style: AppText.caption.copyWith(
+          color: const Color(0xFF15803D),
+          fontWeight: FontWeight.w900,
+          fontSize: 11,
+          letterSpacing: 0.8,
+        ),
+      ),
+    );
+  }
+}
+
+/// Badge Status Gizi: "Gizi baik" (hijau) atau "Perlu perhatian" (kuning/amber).
+class StatusGiziBadge extends StatelessWidget {
+  final String status;
+
+  const StatusGiziBadge({super.key, required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = status.toLowerCase();
+    final isGood = s.contains('baik') || s.contains('normal');
+    final isWarning = s.contains('perlu') || s.contains('kurang') || s.contains('lebih') || s.contains('waspada');
+
+    final Color bgColor;
+    final Color fgColor;
+
+    if (isGood) {
+      bgColor = const Color(0xFFDCFCE7);
+      fgColor = const Color(0xFF15803D);
+    } else if (isWarning) {
+      bgColor = const Color(0xFFFEF3C7);
+      fgColor = const Color(0xFFB45309);
+    } else {
+      bgColor = const Color(0xFFF1F5F9);
+      fgColor = const Color(0xFF475569);
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Text(
+        status.isEmpty ? 'Gizi baik' : status,
+        style: AppText.caption.copyWith(
+          color: fgColor,
+          fontWeight: FontWeight.w800,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+}
+

@@ -8,10 +8,6 @@ import '../widgets/app_theme.dart';
 import '../widgets/child_picker.dart';
 import '../widgets/design_tokens.dart';
 import '../widgets/kader_widgets.dart';
-import 'data_anak_page.dart';
-import 'home_kader_page.dart';
-import 'jadwal_page.dart';
-import 'profil_page.dart';
 
 class Pemeriksaan {
   final String? id;
@@ -30,14 +26,14 @@ class Pemeriksaan {
     required this.catatan,
   });
 
-  factory Pemeriksaan.fromMap(Map<String, dynamic> map) {
+  factory Pemeriksaan.fromMap(Map map) {
     return Pemeriksaan(
       id: map['id']?.toString(),
-      anakId: map['anak_id']?.toString() ?? '',
-      tanggal: map['tanggal']?.toString() ?? '',
+      anakId: (map['anak_id'] ?? '').toString().trim(),
+      tanggal: (map['tanggal'] ?? '').toString(),
       beratBadan: double.tryParse(map['berat_badan']?.toString() ?? '0') ?? 0,
       tinggiBadan: double.tryParse(map['tinggi_badan']?.toString() ?? '0') ?? 0,
-      catatan: map['catatan']?.toString() ?? '',
+      catatan: (map['catatan'] ?? '').toString(),
     );
   }
 }
@@ -52,7 +48,7 @@ class PemeriksaanPage extends StatefulWidget {
 }
 
 class _PemeriksaanPageState extends State<PemeriksaanPage> {
-  List<dynamic> dataAnak = [];
+  List dataAnak = [];
   List<Pemeriksaan> dataPemeriksaan = [];
 
   bool _isLoading = true;
@@ -69,16 +65,35 @@ class _PemeriksaanPageState extends State<PemeriksaanPage> {
 
       _autoFormShown = true;
 
-      if (dataAnak.isNotEmpty) {
+      if (_activeBalitaList.isNotEmpty) {
         tampilkanForm();
-      } else {
+      } else if (dataAnak.isEmpty) {
         _showSnack(_belumAdaAnak);
+      } else {
+        _showSnack(_semuaLulusBalita);
       }
     });
   }
 
   static const _belumAdaAnak =
-      'Belum ada data anak. Tambahkan anak lebih dulu di menu Anak.';
+      'Belum ada data anak. Tambahkan anak lebih dulu di menu Monitoring Anak.';
+  static const _semuaLulusBalita =
+      'Semua anak terdaftar sudah berusia ≥ 5 tahun (Lulus KMS Balita).';
+
+  bool _isUnderFive(dynamic item) {
+    if (item is! Map) return false;
+    final rawBirth = item['tanggal_lahir']?.toString();
+    if (rawBirth == null || rawBirth.isEmpty) return true;
+    final birth = DateTime.tryParse(rawBirth);
+    if (birth == null) return true;
+    final now = DateTime.now();
+    final months = (now.year - birth.year) * 12 + (now.month - birth.month);
+    return months < 60;
+  }
+
+  List get _activeBalitaList {
+    return dataAnak.whereType().where(_isUnderFive).toList();
+  }
 
   void _showSnack(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -105,10 +120,10 @@ class _PemeriksaanPageState extends State<PemeriksaanPage> {
       if (!mounted) return;
 
       setState(() {
-        dataAnak = anakResponse as List<dynamic>;
+        dataAnak = anakResponse as List;
 
-        dataPemeriksaan = (periksaResponse as List<dynamic>)
-            .map((item) => Pemeriksaan.fromMap(item as Map<String, dynamic>))
+        dataPemeriksaan = (periksaResponse as List)
+            .map((item) => Pemeriksaan.fromMap(item as Map))
             .toList();
       });
     } catch (error) {
@@ -116,13 +131,11 @@ class _PemeriksaanPageState extends State<PemeriksaanPage> {
 
       setState(() => _loadFailed = true);
 
-      // Bila belum ada data, layar menampilkan ErrorState dengan "Coba lagi".
-      // Bila sudah ada data lama di layar, cukup beri tahu lewat snackbar.
       if (dataPemeriksaan.isNotEmpty) {
         _showSnack(
           friendlyError(
             error,
-            fallback: 'Data belum bisa diperbarui. Tarik layar ke bawah untuk mencoba lagi.',
+            fallback: 'Data belum bisa diperbarui. Coba lagi sebentar lagi.',
           ),
         );
       } else {
@@ -137,24 +150,25 @@ class _PemeriksaanPageState extends State<PemeriksaanPage> {
     }
   }
 
-  Map<String, dynamic>? getChildData(String anakId) {
-    try {
-      return dataAnak.firstWhere(
-            (item) => item['id'].toString() == anakId,
-            orElse: () => null,
-          )
-          as Map<String, dynamic>?;
-    } catch (_) {
-      return null;
+  Map? getChildData(String anakId) {
+    final targetId = anakId.trim();
+    if (targetId.isEmpty) return null;
+
+    for (final item in dataAnak) {
+      if (item is Map && item['id']?.toString().trim() == targetId) {
+        return item;
+      }
     }
+    return null;
   }
 
   String namaAnak(String anakId) {
     final child = getChildData(anakId);
-
-    return child != null
-        ? (child['nama'] ?? 'Tidak Diketahui')
-        : 'Tidak Diketahui';
+    if (child != null) {
+      final nama = child['nama']?.toString().trim() ?? '';
+      if (nama.isNotEmpty) return nama;
+    }
+    return 'Data anak terhapus';
   }
 
   String _tanggalTampil(String iso) {
@@ -162,24 +176,46 @@ class _PemeriksaanPageState extends State<PemeriksaanPage> {
     return date == null ? iso : tanggalLengkap(date);
   }
 
-  // ---------------------------------------------------------------------------
-  // FORM TAMBAH / UBAH
-  // ---------------------------------------------------------------------------
   Future<void> tampilkanForm({Pemeriksaan? pemeriksaan}) async {
     if (dataAnak.isEmpty) {
       _showSnack(_belumAdaAnak);
       return;
     }
 
-    final message = await showModalBottomSheet<String>(
+    final childMaps = pemeriksaan == null
+        ? _activeBalitaList
+        : dataAnak.whereType().toList();
+
+    if (childMaps.isEmpty) {
+      _showSnack(_semuaLulusBalita);
+      return;
+    }
+
+    final message = await showDialog<String>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
       builder: (_) => Theme(
         data: AppTheme.kader,
-        child: _PemeriksaanFormSheet(
-          children: dataAnak.whereType<Map<String, dynamic>>().toList(),
-          pemeriksaan: pemeriksaan,
+        child: Dialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Padding(
+              padding: const EdgeInsets.only(top: 20),
+              child: _PemeriksaanFormSheet(
+                children: childMaps,
+                existingRecords: dataPemeriksaan,
+                pemeriksaan: pemeriksaan,
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -190,9 +226,6 @@ class _PemeriksaanPageState extends State<PemeriksaanPage> {
     await loadData();
   }
 
-  // ---------------------------------------------------------------------------
-  // HAPUS
-  // ---------------------------------------------------------------------------
   Future<void> _hapus(Pemeriksaan pemeriksaan) async {
     final nama = namaAnak(pemeriksaan.anakId);
 
@@ -228,88 +261,6 @@ class _PemeriksaanPageState extends State<PemeriksaanPage> {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // NAVIGASI
-  // ---------------------------------------------------------------------------
-  void _onNavigationTap(BuildContext context, int index) {
-    // KaderBottomAppBar: 0=Beranda, 1=Anak, [FAB=CatatGizi], 2=Jadwal, 3=Profil
-    final Widget? page = switch (index) {
-      0 => const HomeKaderPage(),
-      1 => const DataAnakPage(isKader: true),
-      2 => const JadwalPage(isKader: true),
-      3 => const ProfilPage(),
-      _ => null,
-    };
-
-    if (page != null) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => page),
-      );
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // BUILD
-  // ---------------------------------------------------------------------------
-  Widget _buildBody(List<Pemeriksaan> filtered) {
-    if (_isLoading && dataPemeriksaan.isEmpty && !_loadFailed) {
-      return const LoadingState(message: 'Memuat catatan gizi');
-    }
-
-    if (_loadFailed && dataPemeriksaan.isEmpty) {
-      return ErrorState(onRetry: loadData);
-    }
-
-    if (dataPemeriksaan.isEmpty) {
-      return EmptyState(
-        icon: Icons.monitor_weight_outlined,
-        title: 'Belum ada catatan gizi',
-        message:
-            'Catat berat dan tinggi badan anak untuk mulai memantau pertumbuhannya.',
-        actionLabel: 'Catat gizi',
-        onAction: () => tampilkanForm(),
-      );
-    }
-
-    if (filtered.isEmpty) {
-      return EmptyState(
-        icon: Icons.search_off_rounded,
-        title: 'Tidak ada hasil',
-        message: 'Tidak ada catatan yang cocok dengan "$_searchQuery".',
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: loadData,
-      child: ListView.separated(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(
-          AppSpace.page,
-          AppSpace.sm,
-          AppSpace.page,
-          AppSpace.xl,
-        ),
-        itemCount: filtered.length,
-        separatorBuilder: (_, _) => const SizedBox(height: AppSpace.md),
-        itemBuilder: (context, index) {
-          final item = filtered[index];
-          final nama = namaAnak(item.anakId);
-
-          return _RecordCard(
-            name: nama,
-            dateText: _tanggalTampil(item.tanggal),
-            weight: '${item.beratBadan} kg',
-            height: '${item.tinggiBadan} cm',
-            note: item.catatan,
-            onEdit: () => tampilkanForm(pemeriksaan: item),
-            onDelete: () => _hapus(item),
-          );
-        },
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final filteredList = dataPemeriksaan.where((p) {
@@ -323,66 +274,151 @@ class _PemeriksaanPageState extends State<PemeriksaanPage> {
     }).toList();
 
     final total = dataPemeriksaan.length;
+    final isMobile = MediaQuery.sizeOf(context).width < 600;
 
-    return Theme(
-      data: AppTheme.kader,
-      child: Scaffold(
-        body: SafeArea(
+    return KaderWebScaffold(
+      activeIndex: 2,
+      breadcrumb: 'Beranda / Pencatatan Gizi',
+      body: Padding(
+        padding: EdgeInsets.all(isMobile ? 16 : 24),
+        child: Container(
+          padding: EdgeInsets.all(isMobile ? 16 : 24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.divider),
+          ),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpace.sm,
-                  AppSpace.md,
-                  AppSpace.page,
-                  AppSpace.sm,
-                ),
-                child: KaderTopBar(
-                  title: 'Catat Gizi',
-                  subtitle: 'Timbang & ukur pertumbuhan anak',
-                  onBack: () => Navigator.maybePop(context),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpace.page),
-                child: AppSearchField(
+              if (isMobile) ...[
+                AppSearchField(
                   hint: 'Cari nama anak atau catatan',
                   onChanged: (value) => setState(() => _searchQuery = value),
                 ),
-              ),
-              if (total > 0) ...[
-                const SizedBox(height: AppSpace.sm),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpace.page,
-                  ),
-                  child: KaderInfoPill(
-                    icon: Icons.history_rounded,
-                    message: _searchQuery.isEmpty
-                        ? '$total catatan pengukuran gizi'
-                        : '${filteredList.length} dari $total catatan',
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () => tampilkanForm(),
+                  icon: const Icon(Icons.add_rounded, size: 20),
+                  label: const Text('Catat gizi'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.navy,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    minimumSize: const Size.fromHeight(48),
                   ),
                 ),
+              ] else
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppSearchField(
+                        hint: 'Cari nama anak atau catatan',
+                        onChanged: (value) =>
+                            setState(() => _searchQuery = value),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    FilledButton.icon(
+                      onPressed: () => tampilkanForm(),
+                      icon: const Icon(Icons.add_rounded, size: 20),
+                      label: const Text('Catat gizi'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.navy,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        minimumSize: const Size(136, 48),
+                      ),
+                    ),
+                  ],
+                ),
+              const SizedBox(height: 16),
+
+              if (total > 0) ...[
+                KaderInfoPill(
+                  icon: Icons.history_rounded,
+                  message: _searchQuery.isEmpty
+                      ? '$total catatan pengukuran gizi'
+                      : '${filteredList.length} dari $total catatan',
+                ),
+                const SizedBox(height: 16),
               ],
-              const SizedBox(height: AppSpace.sm),
-              Expanded(child: _buildBody(filteredList)),
+
+              _buildBody(filteredList),
             ],
           ),
-        ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-        floatingActionButton: KaderCenterFab(onPressed: () => tampilkanForm()),
-        bottomNavigationBar: KaderBottomAppBar(
-          selectedIndex: -1,
-          onTabSelected: (index) => _onNavigationTap(context, index),
         ),
       ),
     );
   }
+
+  Widget _buildBody(List<Pemeriksaan> filtered) {
+    if (_isLoading && dataPemeriksaan.isEmpty && !_loadFailed) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 40),
+        child: LoadingState(message: 'Memuat catatan gizi'),
+      );
+    }
+
+    if (_loadFailed && dataPemeriksaan.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: ErrorState(onRetry: loadData),
+      );
+    }
+
+    if (dataPemeriksaan.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: EmptyState(
+          icon: Icons.monitor_weight_outlined,
+          title: 'Belum ada catatan gizi',
+          message:
+              'Catat berat dan tinggi badan anak untuk mulai memantau pertumbuhannya.',
+          actionLabel: 'Catat gizi',
+          onAction: () => tampilkanForm(),
+        ),
+      );
+    }
+
+    if (filtered.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: EmptyState(
+          icon: Icons.search_off_rounded,
+          title: 'Tidak ada hasil',
+          message: 'Tidak ada catatan yang cocok dengan "$_searchQuery".',
+        ),
+      );
+    }
+
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: filtered.length,
+      separatorBuilder: (_, _) => const SizedBox(height: AppSpace.md),
+      itemBuilder: (context, index) {
+        final item = filtered[index];
+        final nama = namaAnak(item.anakId);
+
+        return _RecordCard(
+          name: nama,
+          dateText: _tanggalTampil(item.tanggal),
+          weight: '${item.beratBadan} kg',
+          height: '${item.tinggiBadan} cm',
+          note: item.catatan,
+          onEdit: () => tampilkanForm(pemeriksaan: item),
+          onDelete: () => _hapus(item),
+        );
+      },
+    );
+  }
 }
 
-// =============================================================================
-// KARTU RIWAYAT
-// =============================================================================
 class _RecordCard extends StatelessWidget {
   final String name;
   final String dateText;
@@ -535,15 +571,14 @@ class _Measure extends StatelessWidget {
   }
 }
 
-// =============================================================================
-// LEMBAR FORM
-// =============================================================================
 class _PemeriksaanFormSheet extends StatefulWidget {
-  final List<Map<String, dynamic>> children;
+  final List children;
+  final List<Pemeriksaan> existingRecords;
   final Pemeriksaan? pemeriksaan;
 
   const _PemeriksaanFormSheet({
     required this.children,
+    required this.existingRecords,
     required this.pemeriksaan,
   });
 
@@ -553,10 +588,10 @@ class _PemeriksaanFormSheet extends StatefulWidget {
 
 class _PemeriksaanFormSheetState extends State<_PemeriksaanFormSheet> {
   static const _noteChips = [
-    'ASI eksklusif',
-    'MP-ASI',
-    'Nafsu makan baik',
-    'Perlu PMT',
+    'Pertumbuhan baik, status gizi normal',
+    'Perlu peningkatan asupan protein hewani',
+    'ASI eksklusif & pemantauan rutin',
+    'Perlu PMT & kontrol bulan depan',
   ];
 
   final _formKey = GlobalKey<FormState>();
@@ -581,8 +616,6 @@ class _PemeriksaanFormSheetState extends State<_PemeriksaanFormSheet> {
 
     final p = widget.pemeriksaan;
 
-    // Catatan baru: anak TIDAK dipilih otomatis (kecuali hanya ada satu),
-    // supaya catatan tidak tersimpan ke anak yang salah tanpa disadari.
     if (p != null) {
       _selectedChildId = p.anakId;
     } else if (widget.children.length == 1) {
@@ -595,7 +628,6 @@ class _PemeriksaanFormSheetState extends State<_PemeriksaanFormSheet> {
         ? (DateTime.tryParse(p.tanggal) ?? DateTime.now())
         : DateTime.now();
 
-    // Catatan baru: berat dan tinggi dimulai KOSONG, bukan 10 kg / 75 cm.
     _weightCtrl = TextEditingController(
       text: (p != null && p.beratBadan > 0)
           ? p.beratBadan.toStringAsFixed(1)
@@ -626,19 +658,37 @@ class _PemeriksaanFormSheetState extends State<_PemeriksaanFormSheet> {
     super.dispose();
   }
 
-  Map<String, dynamic>? get _child {
+  Map? get _child {
     for (final c in widget.children) {
-      if (c['id'].toString() == _selectedChildId) return c;
+      if (c['id'].toString().trim() == _selectedChildId.trim()) return c;
     }
     return null;
   }
 
-  String get _childName => (_child?['nama'] ?? 'Tidak Diketahui').toString();
+  String get _childName =>
+      (_child?['nama'] ?? 'Anak tidak ditemukan').toString();
+
+  Pemeriksaan? get _previousExam {
+    if (_selectedChildId.isEmpty) return null;
+    final list = widget.existingRecords
+        .where(
+          (r) =>
+              r.anakId.trim() == _selectedChildId.trim() &&
+              r.id != widget.pemeriksaan?.id,
+        )
+        .toList();
+    if (list.isEmpty) return null;
+    list.sort((a, b) => a.tanggal.compareTo(b.tanggal));
+    return list.last;
+  }
 
   Future<void> _pickChild() async {
     final id = await showChildPicker(
       context,
-      children: widget.children,
+      children: List.generate(
+        widget.children.length,
+        (i) => Map<String, dynamic>.from(widget.children[i] as Map),
+      ),
       selectedId: _selectedChildId.isEmpty ? null : _selectedChildId,
     );
 
@@ -683,15 +733,40 @@ class _PemeriksaanFormSheetState extends State<_PemeriksaanFormSheet> {
 
     if (!formOk || !childOk) return;
 
-    setState(() => _isSaving = true);
-
-    // Dibulatkan ke satu desimal, sama seperti sebelumnya.
     final weight = double.parse(
       MeasurementField.parse(_weightCtrl.text)!.toStringAsFixed(1),
     );
     final height = double.parse(
       MeasurementField.parse(_heightCtrl.text)!.toStringAsFixed(1),
     );
+
+    final prev = _previousExam;
+    if (prev != null) {
+      final warnings = <String>[];
+      if (height < prev.tinggiBadan - 0.5) {
+        warnings.add(
+          'Tinggi badan baru ($height cm) lebih rendah dari pemeriksaan sebelumnya (${prev.tinggiBadan.toStringAsFixed(1)} cm).',
+        );
+      }
+      if ((weight - prev.beratBadan).abs() > 2.0) {
+        warnings.add(
+          'Perubahan berat badan cukup besar dari ${prev.beratBadan.toStringAsFixed(1)} kg menjadi $weight kg.',
+        );
+      }
+
+      if (warnings.isNotEmpty) {
+        final proceed = await showConfirmDialog(
+          context,
+          title: 'Periksa kembali angka input',
+          message:
+              '${warnings.join('\n')}\n\nApakah Anda yakin angka tersebut sudah benar?',
+          confirmLabel: 'Ya, sudah benar',
+        );
+        if (!proceed || !mounted) return;
+      }
+    }
+
+    setState(() => _isSaving = true);
 
     final formattedDate =
         "${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}";
@@ -700,12 +775,21 @@ class _PemeriksaanFormSheetState extends State<_PemeriksaanFormSheet> {
         ? _selectedChip
         : _noteCtrl.text.trim();
 
+    final statusGizi =
+        weight > 0 && weight < 7.0 ? 'Perlu perhatian' : 'Gizi baik';
+    final statusKms = prev == null
+        ? 'B'
+        : (weight > prev.beratBadan ? 'N' : 'T');
+
     final mapData = {
       'anak_id': _selectedChildId,
       'tanggal': formattedDate,
       'berat_badan': weight,
       'tinggi_badan': height,
       'catatan': finalNote,
+      'status_gizi': statusGizi,
+      'status_kms': statusKms,
+      if (_isEdit) 'updated_at': DateTime.now().toUtc().toIso8601String(),
     };
 
     try {
@@ -752,12 +836,11 @@ class _PemeriksaanFormSheetState extends State<_PemeriksaanFormSheet> {
     return Padding(
       padding: EdgeInsets.only(bottom: inset),
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: height * 0.92),
+        constraints: BoxConstraints(maxHeight: height * 0.88),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Kepala
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 AppSpace.page,
@@ -779,7 +862,7 @@ class _PemeriksaanFormSheetState extends State<_PemeriksaanFormSheet> {
                           ),
                         ),
                         Text(
-                          'Isi hasil timbang dan ukur anak.',
+                          'Hanya menampilkan balita aktif (< 5 tahun).',
                           style: AppText.caption,
                         ),
                       ],
@@ -793,8 +876,6 @@ class _PemeriksaanFormSheetState extends State<_PemeriksaanFormSheet> {
                 ],
               ),
             ),
-
-            // Isi
             Flexible(
               child: SingleChildScrollView(
                 keyboardDismissBehavior:
@@ -813,7 +894,7 @@ class _PemeriksaanFormSheetState extends State<_PemeriksaanFormSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text('Anak', style: AppText.label),
+                      Text('Anak (Balita Aktif)', style: AppText.label),
                       const SizedBox(height: 6),
                       KaderChildSelectorTile(
                         childName: child == null ? '' : _childName,
@@ -851,9 +932,9 @@ class _PemeriksaanFormSheetState extends State<_PemeriksaanFormSheet> {
                         unit: 'kg',
                         controller: _weightCtrl,
                         step: 0.1,
-                        min: 0.5,
-                        max: 100,
-                        helper: 'Ketik angka, contoh: 12.4',
+                        min: 1.5,
+                        max: 45,
+                        helper: 'Rentang wajar balita: 1.5 – 45 kg (contoh: 12.4)',
                       ),
                       const SizedBox(height: AppSpace.lg),
 
@@ -862,13 +943,13 @@ class _PemeriksaanFormSheetState extends State<_PemeriksaanFormSheet> {
                         unit: 'cm',
                         controller: _heightCtrl,
                         step: 0.5,
-                        min: 20,
-                        max: 200,
-                        helper: 'Ketik angka, contoh: 78.5',
+                        min: 40,
+                        max: 140,
+                        helper: 'Rentang wajar balita: 40 – 140 cm (contoh: 77.0)',
                       ),
                       const SizedBox(height: AppSpace.lg),
 
-                      Text('Catatan gizi (opsional)', style: AppText.label),
+                      Text('Template catatan cepat', style: AppText.label),
                       const SizedBox(height: AppSpace.sm),
                       Wrap(
                         spacing: AppSpace.sm,
@@ -885,7 +966,7 @@ class _PemeriksaanFormSheetState extends State<_PemeriksaanFormSheet> {
                             backgroundColor: scheme.primaryContainer,
                             side: BorderSide.none,
                             labelStyle: AppText.caption.copyWith(
-                              fontSize: 13,
+                              fontSize: 12.5,
                               fontWeight: FontWeight.w800,
                               color: selected
                                   ? scheme.onPrimary
@@ -902,9 +983,9 @@ class _PemeriksaanFormSheetState extends State<_PemeriksaanFormSheet> {
                       ),
                       const SizedBox(height: AppSpace.md),
                       AppTextField(
-                        label: 'Catatan lain',
+                        label: 'Catatan tambahan (opsional)',
                         controller: _noteCtrl,
-                        hint: 'Ketik jika tidak ada di pilihan di atas',
+                        hint: 'Tulis catatan khusus jika perlu',
                         textCapitalization: TextCapitalization.sentences,
                         textInputAction: TextInputAction.done,
                         onChanged: (value) {
@@ -918,8 +999,6 @@ class _PemeriksaanFormSheetState extends State<_PemeriksaanFormSheet> {
                 ),
               ),
             ),
-
-            // Kaki
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 AppSpace.page,

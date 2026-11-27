@@ -10,10 +10,6 @@ import '../widgets/app_theme.dart';
 import '../widgets/child_picker.dart';
 import '../widgets/design_tokens.dart';
 import '../widgets/kader_widgets.dart';
-import 'data_anak_page.dart';
-import 'home_kader_page.dart';
-import 'jadwal_page.dart';
-import 'profil_page.dart';
 
 class ImunisasiPage extends StatefulWidget {
   final bool openFormOnStart;
@@ -92,8 +88,6 @@ class _ImunisasiPageState extends State<ImunisasiPage> {
 
       setState(() => _loadFailed = true);
 
-      // Bila belum ada data, layar menampilkan ErrorState dengan "Coba lagi".
-      // Bila sudah ada data lama di layar, cukup beri tahu lewat snackbar.
       if (dataImunisasi.isNotEmpty) {
         _showSnack(
           friendlyError(
@@ -133,22 +127,37 @@ class _ImunisasiPageState extends State<ImunisasiPage> {
     return date == null ? iso : tanggalLengkap(date);
   }
 
-  // ---------------------------------------------------------------------------
-  // FORM TAMBAH / UBAH
-  // ---------------------------------------------------------------------------
   Future<void> tampilkanForm({Imunisasi? imunisasi}) async {
     if (dataAnak.isEmpty) {
       _showSnack(_belumAdaAnak);
       return;
     }
 
-    final message = await showModalBottomSheet<String>(
+    final message = await showDialog<String>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
       builder: (_) => Theme(
         data: AppTheme.kader,
-        child: _ImunisasiFormSheet(children: dataAnak, imunisasi: imunisasi),
+        child: Dialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Padding(
+              padding: const EdgeInsets.only(top: 20),
+              child: _ImunisasiFormSheet(
+                children: dataAnak,
+                imunisasi: imunisasi,
+              ),
+            ),
+          ),
+        ),
       ),
     );
 
@@ -158,9 +167,6 @@ class _ImunisasiPageState extends State<ImunisasiPage> {
     await loadData();
   }
 
-  // ---------------------------------------------------------------------------
-  // HAPUS
-  // ---------------------------------------------------------------------------
   Future<void> hapusData(Imunisasi imunisasi) async {
     final nama = namaAnak(imunisasi.anakId);
 
@@ -196,87 +202,6 @@ class _ImunisasiPageState extends State<ImunisasiPage> {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // NAVIGASI
-  // ---------------------------------------------------------------------------
-  void _onNavigationTap(BuildContext context, int index) {
-    // KaderBottomAppBar: 0=Beranda, 1=Anak, [FAB=Imunisasi], 2=Jadwal, 3=Profil
-    if (index == -1) return; // center FAB tapped through nav
-
-    final Widget? page = switch (index) {
-      0 => const HomeKaderPage(),
-      1 => const DataAnakPage(isKader: true),
-      2 => const JadwalPage(isKader: true),
-      3 => const ProfilPage(),
-      _ => null,
-    };
-
-    if (page != null) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => page),
-      );
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // BUILD
-  // ---------------------------------------------------------------------------
-  Widget _buildBody(List<Imunisasi> filtered) {
-    if (isLoading && dataImunisasi.isEmpty && !_loadFailed) {
-      return const LoadingState(message: 'Memuat catatan imunisasi');
-    }
-
-    if (_loadFailed && dataImunisasi.isEmpty) {
-      return ErrorState(onRetry: loadData);
-    }
-
-    if (dataImunisasi.isEmpty) {
-      return EmptyState(
-        icon: Icons.vaccines_outlined,
-        title: 'Belum ada catatan imunisasi',
-        message: 'Catat vaksin dan vitamin yang sudah diberikan kepada anak.',
-        actionLabel: 'Catat imunisasi',
-        onAction: () => tampilkanForm(),
-      );
-    }
-
-    if (filtered.isEmpty) {
-      return EmptyState(
-        icon: Icons.search_off_rounded,
-        title: 'Tidak ada hasil',
-        message: 'Tidak ada catatan yang cocok dengan "$_searchQuery".',
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: loadData,
-      child: ListView.separated(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(
-          AppSpace.page,
-          AppSpace.sm,
-          AppSpace.page,
-          AppSpace.xl,
-        ),
-        itemCount: filtered.length,
-        separatorBuilder: (_, _) => const SizedBox(height: AppSpace.md),
-        itemBuilder: (context, index) {
-          final item = filtered[index];
-
-          return _RecordCard(
-            vaccine: item.namaVaksin,
-            childName: namaAnak(item.anakId),
-            dateText: _tanggalTampil(item.tanggal),
-            note: item.keterangan,
-            onEdit: () => tampilkanForm(imunisasi: item),
-            onDelete: () => hapusData(item),
-          );
-        },
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final filteredList = dataImunisasi.where((item) {
@@ -291,70 +216,153 @@ class _ImunisasiPageState extends State<ImunisasiPage> {
     }).toList();
 
     final total = dataImunisasi.length;
+    final isMobile = MediaQuery.sizeOf(context).width < 600;
 
-    return Theme(
-      data: AppTheme.kader,
-      child: Scaffold(
-        body: SafeArea(
+    return KaderWebScaffold(
+      activeIndex: 3,
+      breadcrumb: 'Beranda / Input Imunisasi',
+      body: Padding(
+        padding: EdgeInsets.fromLTRB(
+          isMobile ? 16 : 24,
+          isMobile ? 16 : 24,
+          isMobile ? 16 : 24,
+          8,
+        ),
+        child: Container(
+          padding: EdgeInsets.all(isMobile ? 16 : 24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.divider),
+          ),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpace.sm,
-                  AppSpace.md,
-                  AppSpace.page,
-                  AppSpace.sm,
-                ),
-                child: KaderTopBar(
-                  title: 'Catat Imunisasi',
-                  subtitle: 'Vaksin & vitamin anak',
-                  onBack: () => Navigator.maybePop(context),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpace.page),
-                child: AppSearchField(
+              if (isMobile) ...[
+                AppSearchField(
                   hint: 'Cari nama anak atau jenis vaksin',
                   onChanged: (value) => setState(() => _searchQuery = value),
                 ),
-              ),
-              if (total > 0) ...[
-                const SizedBox(height: AppSpace.sm),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpace.page,
-                  ),
-                  child: KaderInfoPill(
-                    icon: Icons.vaccines_outlined,
-                    message: _searchQuery.isEmpty
-                        ? '$total catatan imunisasi'
-                        : '${filteredList.length} dari $total catatan',
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () => tampilkanForm(),
+                  icon: const Icon(Icons.add_rounded, size: 20),
+                  label: const Text('Catat imunisasi'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.navy,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    minimumSize: const Size.fromHeight(48),
                   ),
                 ),
+              ] else
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppSearchField(
+                        hint: 'Cari nama anak atau jenis vaksin',
+                        onChanged: (value) =>
+                            setState(() => _searchQuery = value),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    FilledButton.icon(
+                      onPressed: () => tampilkanForm(),
+                      icon: const Icon(Icons.add_rounded, size: 20),
+                      label: const Text('Catat imunisasi'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.navy,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        minimumSize: const Size(140, 48),
+                      ),
+                    ),
+                  ],
+                ),
+              const SizedBox(height: 16),
+
+              if (total > 0) ...[
+                KaderInfoPill(
+                  icon: Icons.vaccines_outlined,
+                  message: _searchQuery.isEmpty
+                      ? '$total catatan imunisasi'
+                      : '${filteredList.length} dari $total catatan',
+                ),
+                const SizedBox(height: 16),
               ],
-              const SizedBox(height: AppSpace.sm),
-              Expanded(child: _buildBody(filteredList)),
+
+              _buildBody(filteredList),
             ],
           ),
-        ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-        floatingActionButton: KaderCenterFab(
-          tooltip: 'Catat imunisasi',
-          onPressed: () => tampilkanForm(),
-        ),
-        bottomNavigationBar: KaderBottomAppBar(
-          selectedIndex: -1,
-          centerLabel: 'Imunisasi',
-          onTabSelected: (index) => _onNavigationTap(context, index),
         ),
       ),
     );
   }
+
+  Widget _buildBody(List<Imunisasi> filtered) {
+    if (isLoading && dataImunisasi.isEmpty && !_loadFailed) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 40),
+        child: LoadingState(message: 'Memuat catatan imunisasi'),
+      );
+    }
+
+    if (_loadFailed && dataImunisasi.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: ErrorState(onRetry: loadData),
+      );
+    }
+
+    if (dataImunisasi.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: EmptyState(
+          icon: Icons.vaccines_outlined,
+          title: 'Belum ada catatan imunisasi',
+          message: 'Catat vaksin dan vitamin yang sudah diberikan kepada anak.',
+          actionLabel: 'Catat imunisasi',
+          onAction: () => tampilkanForm(),
+        ),
+      );
+    }
+
+    if (filtered.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: EmptyState(
+          icon: Icons.search_off_rounded,
+          title: 'Tidak ada hasil',
+          message: 'Tidak ada catatan yang cocok dengan "$_searchQuery".',
+        ),
+      );
+    }
+
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: filtered.length,
+      separatorBuilder: (_, _) => const SizedBox(height: AppSpace.md),
+      itemBuilder: (context, index) {
+        final item = filtered[index];
+
+        return _RecordCard(
+          vaccine: item.namaVaksin,
+          childName: namaAnak(item.anakId),
+          dateText: _tanggalTampil(item.tanggal),
+          note: item.keterangan,
+          onEdit: () => tampilkanForm(imunisasi: item),
+          onDelete: () => hapusData(item),
+        );
+      },
+    );
+  }
 }
 
-// =============================================================================
-// KARTU RIWAYAT
-// =============================================================================
 class _RecordCard extends StatelessWidget {
   final String vaccine;
   final String childName;
@@ -461,9 +469,6 @@ class _RecordCard extends StatelessWidget {
   }
 }
 
-// =============================================================================
-// LEMBAR FORM
-// =============================================================================
 class _ImunisasiFormSheet extends StatefulWidget {
   final List<Anak> children;
   final Imunisasi? imunisasi;
@@ -506,8 +511,6 @@ class _ImunisasiFormSheetState extends State<_ImunisasiFormSheet> {
 
     final i = widget.imunisasi;
 
-    // Catatan baru: anak TIDAK dipilih otomatis (kecuali hanya ada satu),
-    // dan jenis vaksin TIDAK terisi bawaan (sebelumnya "BCG").
     if (i != null) {
       _selectedAnakId = i.anakId;
     } else if (widget.children.length == 1) {
@@ -669,7 +672,6 @@ class _ImunisasiFormSheetState extends State<_ImunisasiFormSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Kepala
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 AppSpace.page,
@@ -702,8 +704,6 @@ class _ImunisasiFormSheetState extends State<_ImunisasiFormSheet> {
                 ],
               ),
             ),
-
-            // Isi
             Flexible(
               child: SingleChildScrollView(
                 keyboardDismissBehavior:
@@ -811,8 +811,6 @@ class _ImunisasiFormSheetState extends State<_ImunisasiFormSheet> {
                 ),
               ),
             ),
-
-            // Kaki
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 AppSpace.page,

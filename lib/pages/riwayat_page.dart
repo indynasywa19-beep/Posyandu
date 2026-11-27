@@ -3,18 +3,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../utils/app_copy.dart';
 import '../widgets/app_components.dart';
-import '../widgets/app_dialogs.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/app_widgets.dart';
 import '../widgets/design_tokens.dart';
 import '../widgets/kader_widgets.dart';
-import 'artikel_page.dart';
 import 'data_anak_page.dart';
-import 'home_kader_page.dart';
 import 'home_ortu_page.dart';
 import 'jadwal_page.dart';
-import 'login_page.dart';
-import 'pemeriksaan_page.dart';
+import 'perkembangan_page.dart';
 import 'profil_page.dart';
 
 class RiwayatPage extends StatefulWidget {
@@ -65,7 +61,7 @@ class _RiwayatPageState extends State<RiwayatPage> {
     });
 
     try {
-      final List<Map<String, dynamic>> children;
+      final List children;
 
       if (widget.isKader) {
         children = await _supabase.from('anak').select('id, nama');
@@ -76,10 +72,12 @@ class _RiwayatPageState extends State<RiwayatPage> {
             .eq('user_id', user!.id);
       }
 
-      final childNames = <Object, String>{};
+      final Map childNames = {};
       for (final child in children) {
         final id = child['id'];
-        if (id is Object) childNames[id] = child['nama']?.toString() ?? '-';
+        if (id != null) {
+          childNames[id.toString()] = child['nama']?.toString() ?? '-';
+        }
       }
 
       if (childNames.isEmpty) {
@@ -92,7 +90,7 @@ class _RiwayatPageState extends State<RiwayatPage> {
         return;
       }
 
-      final ids = childNames.keys.toList();
+      final ids = children.map((c) => c['id']).toList();
 
       final examinations = await _supabase
           .from('pemeriksaan')
@@ -109,11 +107,14 @@ class _RiwayatPageState extends State<RiwayatPage> {
       String measure(Object? value, String unit) =>
           value == null ? '-' : '$value $unit';
 
-      final entries = <_HistoryEntry>[
+      final List<_HistoryEntry> entries = [
         for (final item in examinations)
           _HistoryEntry(
             isVaccination: false,
-            childName: childNames[item['anak_id']] ?? 'Anak tidak ditemukan',
+            childId: item['anak_id'],
+            childName:
+                childNames[item['anak_id']?.toString()]?.toString() ??
+                'Anak tidak ditemukan',
             date: item['tanggal']?.toString() ?? '',
             detail:
                 'Berat ${measure(item['berat_badan'], 'kg')} · '
@@ -123,14 +124,16 @@ class _RiwayatPageState extends State<RiwayatPage> {
         for (final item in vaccinations)
           _HistoryEntry(
             isVaccination: true,
-            childName: childNames[item['anak_id']] ?? 'Anak tidak ditemukan',
+            childId: item['anak_id'],
+            childName:
+                childNames[item['anak_id']?.toString()]?.toString() ??
+                'Anak tidak ditemukan',
             date: item['tanggal']?.toString() ?? '',
             detail: item['nama_vaksin']?.toString() ?? 'Imunisasi',
             note: item['keterangan']?.toString() ?? '',
           ),
       ];
 
-      // Terbaru di atas.
       entries.sort((a, b) {
         final dateA = DateTime.tryParse(a.date);
         final dateB = DateTime.tryParse(b.date);
@@ -163,59 +166,23 @@ class _RiwayatPageState extends State<RiwayatPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // KELUAR AKUN
-  // ---------------------------------------------------------------------------
-  Future<void> _logout() async {
-    final confirmed = await showConfirmDialog(
-      context,
-      title: 'Keluar dari akun?',
-      message: 'Anda perlu masuk lagi untuk membuka SI-POSYANDU.',
-      confirmLabel: 'Keluar',
-      destructive: true,
-    );
-    if (!confirmed || !mounted) return;
-
-    try {
-      await _supabase.auth.signOut();
-
-      if (!mounted) return;
-
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const LoginPage()),
-        (_) => false,
-      );
-    } catch (error) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            friendlyError(
-              error,
-              fallback: 'Belum bisa keluar dari akun. Coba lagi.',
-            ),
-          ),
-        ),
-      );
-    }
-  }
-
-  // ---------------------------------------------------------------------------
   // NAVIGASI (Orang Tua)
   // ---------------------------------------------------------------------------
   void _onParentNavigationTap(BuildContext context, int index) {
+    if (index == 3) return;
     final Widget? page = switch (index) {
       0 => const HomeOrtuPage(),
       1 => const DataAnakPage(),
       2 => const JadwalPage(),
-      3 => const ArtikelPage(),
       4 => const ProfilPage(),
       _ => null,
     };
 
     if (page != null) {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => page),
+      );
     }
   }
 
@@ -223,7 +190,6 @@ class _RiwayatPageState extends State<RiwayatPage> {
   // ISI BERSAMA
   // ---------------------------------------------------------------------------
   Widget _scrollableState(Widget child) {
-    // Dibungkus agar tarik-untuk-memperbarui tetap berfungsi di keadaan kosong.
     return LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -235,16 +201,22 @@ class _RiwayatPageState extends State<RiwayatPage> {
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody({required bool isKader}) {
     if (_isLoading) {
-      return const LoadingState(message: 'Memuat riwayat');
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 40),
+        child: LoadingState(message: 'Memuat riwayat'),
+      );
     }
 
     if (_loadError != null) {
-      return ErrorState(
-        title: 'Riwayat belum bisa dimuat',
-        message: _loadError!,
-        onRetry: _loadHistory,
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: ErrorState(
+          title: 'Riwayat belum bisa dimuat',
+          message: _loadError!,
+          onRetry: _loadHistory,
+        ),
       );
     }
 
@@ -273,14 +245,20 @@ class _RiwayatPageState extends State<RiwayatPage> {
         );
       }
 
+      if (isKader) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 40),
+          child: empty,
+        );
+      }
+
       return RefreshIndicator(
         onRefresh: _loadHistory,
         child: _scrollableState(empty),
       );
     }
 
-    // Susunan: judul bulan, lalu catatan bulan itu (terbaru di atas).
-    final children = <Widget>[];
+    final List<Widget> children = [];
     int? lastKey;
 
     for (final entry in _entries) {
@@ -314,7 +292,15 @@ class _RiwayatPageState extends State<RiwayatPage> {
         _HistoryCard(
           entry: entry,
           dateText: date == null ? entry.date : tanggalLengkap(date),
+          isKader: isKader,
         ),
+      );
+    }
+
+    if (isKader) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
       );
     }
 
@@ -324,9 +310,9 @@ class _RiwayatPageState extends State<RiwayatPage> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(
           AppSpace.page,
-          AppSpace.sm,
+          AppSpace.lg,
           AppSpace.page,
-          AppSpace.xl,
+          100,
         ),
         children: children,
       ),
@@ -337,57 +323,62 @@ class _RiwayatPageState extends State<RiwayatPage> {
   // TAMPILAN KADER
   // ===========================================================================
   Widget _buildKader(BuildContext context) {
-    return Theme(
-      data: AppTheme.kader,
-      child: Scaffold(
-        floatingActionButton: KaderCenterFab(
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const PemeriksaanPage(openFormOnStart: true),
-            ),
-          ),
-        ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-        bottomNavigationBar: KaderBottomAppBar(
-          selectedIndex: -1,
-          onTabSelected: (index) {
-            final Widget? page = switch (index) {
-              0 => const HomeKaderPage(),
-              1 => const DataAnakPage(isKader: true),
-              2 => const JadwalPage(isKader: true),
-              3 => const ProfilPage(),
-              _ => null,
-            };
+    final isMobile = MediaQuery.sizeOf(context).width < 600;
 
-            if (page != null) {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => page),
-              );
-            }
-          },
-        ),
-        body: SafeArea(
+    return KaderWebScaffold(
+      activeIndex: 5,
+      breadcrumb: 'Beranda / Riwayat Global',
+      body: Padding(
+        padding: EdgeInsets.all(isMobile ? 16 : 24),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(color: AppColors.divider),
+          ),
+          padding: EdgeInsets.all(isMobile ? 16 : 24),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpace.sm,
-                  AppSpace.md,
-                  AppSpace.sm,
-                  AppSpace.sm,
-                ),
-                child: KaderTopBar(
-                  title: 'Riwayat Global',
-                  subtitle: _isLoading || _loadError != null
-                      ? 'Catatan pemeriksaan & imunisasi Posyandu'
-                      : '${_entries.length} catatan pemeriksaan & imunisasi',
-                  onBack: () => Navigator.maybePop(context),
-                  trailing: KaderLogoutButton(onPressed: _logout),
-                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Riwayat Global Posyandu',
+                          style: AppText.title.copyWith(
+                            color: AppColors.primaryNavy,
+                            fontSize: isMobile ? 17 : 20,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _isLoading || _loadError != null
+                              ? 'Catatan pemeriksaan & imunisasi Posyandu'
+                              : '${_entries.length} catatan pemeriksaan & imunisasi tercatat',
+                          style: AppText.caption,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: 'Muat ulang data',
+                    onPressed: _loadHistory,
+                    icon: const Icon(
+                      Icons.refresh_rounded,
+                      color: AppColors.primaryNavy,
+                    ),
+                  ),
+                ],
               ),
-              Expanded(child: _buildBody()),
+              const SizedBox(height: AppSpace.md),
+              Divider(height: 1, color: AppColors.divider),
+              const SizedBox(height: AppSpace.md),
+              _buildBody(isKader: true),
             ],
           ),
         ),
@@ -407,10 +398,10 @@ class _RiwayatPageState extends State<RiwayatPage> {
             widget.onlyVaccinations ? 'Riwayat Imunisasi' : 'Riwayat Anak',
           ),
         ),
-        body: _buildBody(),
+        body: _buildBody(isKader: false),
         bottomNavigationBar: AppBottomNav(
           isKader: false,
-          selectedIndex: 1,
+          selectedIndex: 3,
           onTap: (index) => _onParentNavigationTap(context, index),
         ),
       ),
@@ -424,13 +415,227 @@ class _RiwayatPageState extends State<RiwayatPage> {
 }
 
 // =============================================================================
-// KARTU RIWAYAT
+// PENJELASAN JENIS VAKSIN & VITAMIN
+// =============================================================================
+String _vaccineDescription(String vaccineName) {
+  final v = vaccineName.toLowerCase();
+  if (v.contains('hb-0') || v.contains('hepatitis')) {
+    return 'Vaksin Hepatitis B dosis pertama untuk melindungi bayi sejak lahir dari infeksi virus Hepatitis B yang menyerang organ hati.';
+  }
+  if (v.contains('bcg')) {
+    return 'Vaksin BCG melindungi bayi dan anak dari penyakit Tuberkulosis (TBC) berat, termasuk radang selaput otak akibat TBC.';
+  }
+  if (v.contains('polio')) {
+    return 'Vaksin Polio mencegah infeksi virus polio yang dapat menyebabkan kelumpuhan permanen pada anak.';
+  }
+  if (v.contains('dpt')) {
+    return 'Vaksin kombinasi untuk mencegah 5 penyakit sekaligus: Difteri, Pertusis (batuk rejan), Tetanus, Hepatitis B, serta infeksi Hib (radang paru & selaput otak).';
+  }
+  if (v.contains('campak') || v.contains('mr')) {
+    return 'Vaksin Campak / MR melindungi anak dari penularan penyakit campak dan rubella yang dapat menimbulkan komplikasi radang paru maupun radang otak.';
+  }
+  if (v.contains('vitamin a') || v.contains('vit a')) {
+    return 'Suplemen Vitamin A dosis tinggi untuk menjaga kesehatan mata, meningkatkan daya tahan tubuh terhadap infeksi, dan mendukung pertumbuhan sel anak.';
+  }
+  if (v.contains('pcv')) {
+    return 'Vaksin Pneumokokus (PCV) melindungi anak dari infeksi bakteri penyebab pneumonia (radang paru-paru) dan meningitis.';
+  }
+  if (v.contains('rotavirus')) {
+    return 'Vaksin Rotavirus mencegah diare berat akibat infeksi rotavirus yang sering menyebabkan dehidrasi pada bayi dan balita.';
+  }
+  return 'Pemberian imunisasi/suplemen kesehatan sesuai jadwal Posyandu untuk meningkatkan daya tahan tubuh dan melindungi anak dari penyakit menular.';
+}
+
+// =============================================================================
+// KARTU RIWAYAT (DAPAT DIKLIK UNTUK DETAIL LENGKAP)
 // =============================================================================
 class _HistoryCard extends StatelessWidget {
   final _HistoryEntry entry;
   final String dateText;
+  final bool isKader;
 
-  const _HistoryCard({required this.entry, required this.dateText});
+  const _HistoryCard({
+    required this.entry,
+    required this.dateText,
+    required this.isKader,
+  });
+
+  void _showDetailSheet(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isVaccine = entry.isVaccination;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: scheme.primaryContainer,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    isVaccine
+                        ? Icons.vaccines_rounded
+                        : Icons.monitor_weight_rounded,
+                    color: scheme.primary,
+                    size: 26,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isVaccine
+                            ? 'Detail Imunisasi / Vitamin'
+                            : 'Detail Pemeriksaan Gizi',
+                        style: AppText.caption.copyWith(
+                          color: scheme.primary,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        entry.detail,
+                        style: AppText.title.copyWith(fontSize: 18),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Divider(color: AppColors.divider),
+            ),
+            _detailRow('Nama Anak', entry.childName),
+            const SizedBox(height: 10),
+            _detailRow('Tanggal Layanan', dateText),
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.divider),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isVaccine
+                        ? 'Manfaat & Keterangan:'
+                        : 'Keterangan Pemeriksaan:',
+                    style: AppText.label.copyWith(fontSize: 13),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    isVaccine
+                        ? _vaccineDescription(entry.detail)
+                        : 'Hasil penimbangan berat badan dan pengukuran tinggi badan anak yang dicatat oleh Kader Posyandu untuk memantau status gizi.',
+                    style: AppText.body.copyWith(
+                      color: AppColors.secondaryText,
+                      fontSize: 13.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (entry.note.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFBFDBFE)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Catatan dari Kader:',
+                      style: AppText.label.copyWith(
+                        fontSize: 13,
+                        color: AppColors.navy,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      entry.note,
+                      style: AppText.body.copyWith(
+                        color: AppColors.text,
+                        fontSize: 13.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (!isVaccine) ...[
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                height: 46,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => PerkembanganPage(
+                          isKader: isKader,
+                          anakId: entry.childId,
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.show_chart_rounded, size: 18),
+                  label: const Text('Lihat Grafik di KMS Digital'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.navy,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: AppText.caption),
+        Text(
+          value,
+          style: AppText.label.copyWith(fontSize: 13.5),
+        ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -438,6 +643,7 @@ class _HistoryCard extends StatelessWidget {
     final isVaccine = entry.isVaccination;
 
     return AppCard(
+      onTap: () => _showDetailSheet(context),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -461,13 +667,25 @@ class _HistoryCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Jenis catatan ditulis dengan teks, bukan hanya warna.
-                Text(
-                  isVaccine ? 'Imunisasi' : 'Pemeriksaan gizi',
-                  style: AppText.caption.copyWith(
-                    color: scheme.primary,
-                    fontWeight: FontWeight.w800,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      isVaccine ? 'Imunisasi / Vitamin' : 'Pemeriksaan gizi',
+                      style: AppText.caption.copyWith(
+                        color: scheme.primary,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      'Lihat detail',
+                      style: AppText.caption.copyWith(
+                        color: AppColors.navy,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 2),
                 Text(entry.childName, style: AppText.subtitle),
@@ -513,6 +731,7 @@ class _HistoryCard extends StatelessWidget {
 
 class _HistoryEntry {
   final bool isVaccination;
+  final Object? childId;
   final String childName;
   final String date;
   final String detail;
@@ -520,6 +739,7 @@ class _HistoryEntry {
 
   const _HistoryEntry({
     required this.isVaccination,
+    this.childId,
     required this.childName,
     required this.date,
     required this.detail,

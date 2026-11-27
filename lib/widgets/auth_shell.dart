@@ -22,8 +22,6 @@ class AuthShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -48,39 +46,13 @@ class AuthShell extends StatelessWidget {
                       ),
                     ),
 
-                  // Merek
-                  Center(
-                    child: ExcludeSemantics(
-                      child: Container(
-                        width: 64,
-                        height: 64,
-                        decoration: BoxDecoration(
-                          color: scheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(AppRadius.card),
-                        ),
-                        child: Icon(
-                          Icons.health_and_safety_rounded,
-                          size: 34,
-                          color: scheme.primary,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpace.md),
-                  Text(
-                    'SI-POSYANDU',
-                    textAlign: TextAlign.center,
-                    style: AppText.headline.copyWith(
-                      fontSize: 26,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Sistem Informasi Posyandu',
-                    textAlign: TextAlign.center,
-                    style: AppText.body.copyWith(
-                      color: AppColors.secondaryText,
+                  // Merek SI-POSYANDU
+                  const Center(
+                    child: SiPosyanduBrand(
+                      iconSize: 52,
+                      isVertical: true,
+                      showGovHeader: true,
+                      showSubtitle: true,
                     ),
                   ),
                   const SizedBox(height: AppSpace.xl),
@@ -93,9 +65,9 @@ class AuthShell extends StatelessWidget {
                   ],
                   const SizedBox(height: AppSpace.md),
                   Text(
-                    'Data Anda digunakan untuk kebutuhan layanan Posyandu.',
+                    'Data kesehatan anak dilindungi dan hanya dapat diakses oleh pihak yang berwenang.',
                     textAlign: TextAlign.center,
-                    style: AppText.caption,
+                    style: AppText.caption.copyWith(color: AppColors.mutedText),
                   ),
                 ],
               ),
